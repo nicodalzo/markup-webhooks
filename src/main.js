@@ -70,6 +70,7 @@ const editAvatarPreview = $('#edit-avatar-preview');
 let pendingCommentPosition = null;
 let pendingAvatarData = '';       // for add form
 let pendingEditAvatarData = '';   // for edit form
+let activeTagFilter = '';         // current tag filter
 
 // ─── Initialize ───────────────────────────────────────────────
 async function init() {
@@ -121,6 +122,12 @@ function setupEventListeners() {
     dialogClose.addEventListener('click', closeCommentDialog);
     dialogCancel.addEventListener('click', closeCommentDialog);
     dialogSave.addEventListener('click', handleSaveComment);
+
+    // Filter clear
+    $('#filter-clear').addEventListener('click', () => {
+        activeTagFilter = '';
+        renderComments();
+    });
 
     // Webhook info: update when assignee changes in comment dialog
     commentAssignee.addEventListener('change', updateWebhookInfo);
@@ -359,12 +366,16 @@ function handleSaveComment() {
         return;
     }
 
+    const tagsRaw = $('#comment-tags').value.trim();
+    const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean) : [];
+
     const comment = store.addComment({
         text,
         x: pendingCommentPosition.x,
         y: pendingCommentPosition.y,
         assignee: commentAssignee.value,
-        priority: commentPriority.value
+        priority: commentPriority.value,
+        tags
     });
 
     closeCommentDialog();
@@ -380,11 +391,26 @@ function handleSaveComment() {
 function closeCommentDialog() {
     commentDialog.style.display = 'none';
     pendingCommentPosition = null;
+    // Clear tags input
+    const tagsInput = $('#comment-tags');
+    if (tagsInput) tagsInput.value = '';
 }
 
 // ─── Render Comments ──────────────────────────────────────────
 function renderComments() {
-    const comments = store.comments;
+    let comments = store.comments;
+
+    // Tag filter
+    const filterBar = $('#filter-bar');
+    const filterTagsEl = $('#filter-tags');
+
+    if (activeTagFilter) {
+        comments = comments.filter(c => (c.tags || []).includes(activeTagFilter));
+        filterBar.style.display = 'flex';
+        filterTagsEl.innerHTML = `<span class="sidebar__filter-tag">${escapeHtml(activeTagFilter)}</span>`;
+    } else {
+        filterBar.style.display = 'none';
+    }
 
     if (comments.length === 0) {
         commentsEmpty.style.display = 'flex';
@@ -404,19 +430,37 @@ function renderComments() {
         const timeStr = time.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         const dateStr = time.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' });
 
-        // Show webhook indicator if there's an active webhook for this comment
         const webhookUrl = store.getWebhookUrlForComment(comment);
 
-        // Avatar display
         const avatarHtml = member && member.avatar
             ? `<img src="${member.avatar}" alt="${escapeHtml(assigneeName)}" class="comment-item__avatar-img" />`
             : '';
+
+        // Clickable page URL (shortened)
+        let urlHtml = '';
+        if (comment.pageUrl) {
+            try {
+                const u = new URL(comment.pageUrl);
+                const short = u.hostname + (u.pathname.length > 20 ? u.pathname.slice(0, 20) + '…' : u.pathname);
+                urlHtml = `<a href="${escapeHtml(comment.pageUrl)}" target="_blank" class="comment-item__url" title="${escapeHtml(comment.pageUrl)}">
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7.5 5.5V8.5H1.5V2.5H4.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/><path d="M6 1.5H8.5V4" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 6L8.5 1.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+                    ${escapeHtml(short)}
+                </a>`;
+            } catch { /* ignore bad URL */ }
+        }
+
+        // Tags
+        const tagsHtml = (comment.tags || []).map(tag =>
+            `<span class="comment-item__tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`
+        ).join('');
 
         return `
       <div class="comment-item" data-id="${comment.id}">
         <div class="comment-item__pin">${comment.number}</div>
         <div class="comment-item__content">
           <div class="comment-item__text">${escapeHtml(comment.text)}</div>
+          ${urlHtml ? `<div class="comment-item__url-row">${urlHtml}</div>` : ''}
+          ${tagsHtml ? `<div class="comment-item__tags">${tagsHtml}</div>` : ''}
           <div class="comment-item__meta">
             ${assigneeName ? `
               <span class="comment-item__assignee">
@@ -464,6 +508,20 @@ function renderComments() {
             renderPins();
             showToast('Commento eliminato', 'success');
         });
+    });
+
+    // Tag click listeners (filter by tag)
+    commentsList.querySelectorAll('.comment-item__tag').forEach(tag => {
+        tag.addEventListener('click', (e) => {
+            e.stopPropagation();
+            activeTagFilter = tag.dataset.tag;
+            renderComments();
+        });
+    });
+
+    // URL click listeners (prevent parent click)
+    commentsList.querySelectorAll('.comment-item__url').forEach(link => {
+        link.addEventListener('click', (e) => e.stopPropagation());
     });
 }
 

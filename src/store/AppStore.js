@@ -88,6 +88,7 @@ class AppStore {
             pageUrl: this.state.currentUrl,
             assignee: comment.assignee || '',
             priority: comment.priority || 'medium',
+            tags: comment.tags || [],
             createdAt: new Date().toISOString(),
             resolved: false
         };

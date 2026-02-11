@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS comments (
     y DOUBLE PRECISION NOT NULL,
     assignee TEXT DEFAULT NULL,
     priority TEXT DEFAULT 'medium',
+    tags TEXT DEFAULT '[]',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

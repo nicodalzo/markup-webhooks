@@ -115,6 +115,15 @@
 
         <!-- Comments Panel -->
         <div class="sidebar__panel active" id="comments-panel">
+          <!-- Tag Filter Bar -->
+          <div class="sidebar__filter" id="filter-bar" style="display:none;">
+            <div class="sidebar__filter-tags" id="filter-tags"></div>
+            <button class="sidebar__filter-clear" id="filter-clear" title="Rimuovi filtri">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
           <div class="sidebar__empty" id="comments-empty">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
               <rect x="4" y="4" width="40" height="40" rx="12" fill="#F0EDFF" />
@@ -197,6 +206,11 @@
             <option value="high">Alta</option>
             <option value="urgent">Urgente</option>
           </select>
+        </div>
+        <div class="comment-dialog__field">
+          <label>Tag</label>
+          <input type="text" id="comment-tags" class="comment-dialog__input"
+            placeholder="bug, design, copy... (separati da virgola)" />
         </div>
         <div class="comment-dialog__webhook-info" id="webhook-info" style="display:none;">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">

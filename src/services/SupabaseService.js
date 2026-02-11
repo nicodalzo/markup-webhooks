@@ -180,6 +180,7 @@ export class SupabaseService {
             y: row.y,
             assignee: row.assignee || '',
             priority: row.priority || 'medium',
+            tags: row.tags ? JSON.parse(row.tags) : [],
             createdAt: row.created_at
         };
     }
@@ -194,6 +195,7 @@ export class SupabaseService {
             y: comment.y,
             assignee: comment.assignee || null,
             priority: comment.priority || 'medium',
+            tags: JSON.stringify(comment.tags || []),
             created_at: comment.createdAt
         };
     }
