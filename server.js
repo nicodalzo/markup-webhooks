@@ -177,6 +177,15 @@ app.post('/api/webhook', async (req, res) => {
         });
 
         const responseText = await response.text();
+
+        if (!response.ok) {
+            return res.status(502).json({
+                success: false,
+                status: response.status,
+                error: `Webhook target returned ${response.status}: ${responseText}`
+            });
+        }
+
         res.json({
             success: true,
             status: response.status,

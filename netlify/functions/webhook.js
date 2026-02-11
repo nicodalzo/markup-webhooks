@@ -38,17 +38,19 @@ export const handler = async (event) => {
         });
 
         const responseText = await response.text();
+        const isSuccess = response.ok; // true only for 2xx
 
         return {
-            statusCode: 200,
+            statusCode: isSuccess ? 200 : 502,
             headers: {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             },
             body: JSON.stringify({
-                success: true,
+                success: isSuccess,
                 status: response.status,
-                response: responseText
+                response: responseText,
+                error: isSuccess ? undefined : `Webhook target returned ${response.status}: ${responseText}`
             })
         };
     } catch (err) {
