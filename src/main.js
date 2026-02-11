@@ -72,9 +72,13 @@ let pendingAvatarData = '';       // for add form
 let pendingEditAvatarData = '';   // for edit form
 
 // ─── Initialize ───────────────────────────────────────────────
-function init() {
+async function init() {
     setupEventListeners();
     setupStoreListeners();
+
+    // Load data from Supabase (or localStorage fallback)
+    await store.init();
+
     restoreState();
     updateCounts();
     renderComments();
