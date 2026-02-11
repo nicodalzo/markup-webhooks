@@ -43,8 +43,6 @@ class AppStore {
             pageUrl: this.state.currentUrl,
             assignee: comment.assignee || '',
             priority: comment.priority || 'medium',
-            webhookEnabled: comment.webhookEnabled || false,
-            webhookUrl: comment.webhookUrl || '',
             createdAt: new Date().toISOString(),
             resolved: false
         };
@@ -112,11 +110,13 @@ class AppStore {
     }
 
     // ─── Team Members ──────────────────────────────────────────
-    addTeamMember(name, email) {
+    addTeamMember(name, email, avatar, webhookUrl) {
         const member = {
             id: this._generateId(),
             name,
             email,
+            avatar: avatar || '',  // base64 data URL or empty
+            webhookUrl: webhookUrl || '',  // per-user webhook
             initials: name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
         };
         this.state.teamMembers.push(member);
@@ -125,16 +125,52 @@ class AppStore {
         return member;
     }
 
+    updateTeamMember(memberId, updates) {
+        const member = this.state.teamMembers.find(m => m.id === memberId);
+        if (member) {
+            if (updates.name !== undefined) {
+                member.name = updates.name;
+                member.initials = updates.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+            }
+            if (updates.email !== undefined) member.email = updates.email;
+            if (updates.avatar !== undefined) member.avatar = updates.avatar;
+            if (updates.webhookUrl !== undefined) member.webhookUrl = updates.webhookUrl;
+            this._save();
+            this._emit('teamUpdated');
+        }
+    }
+
     removeTeamMember(memberId) {
         this.state.teamMembers = this.state.teamMembers.filter(m => m.id !== memberId);
         this._save();
         this._emit('teamUpdated');
     }
 
+    getTeamMemberById(id) {
+        return this.state.teamMembers.find(m => m.id === id);
+    }
+
     // ─── Webhook ────────────────────────────────────────────────
     setGlobalWebhookUrl(url) {
         this.state.globalWebhookUrl = url;
         this._save();
+        this._emit('globalWebhookChanged');
+    }
+
+    /**
+     * Get the appropriate webhook URL for a comment.
+     * Priority: assignee's personal webhook > global webhook
+     */
+    getWebhookUrlForComment(comment) {
+        // If assigned, check if assignee has a personal webhook
+        if (comment.assignee) {
+            const member = this.getTeamMemberById(comment.assignee);
+            if (member && member.webhookUrl) {
+                return member.webhookUrl;
+            }
+        }
+        // Fall back to global webhook
+        return this.state.globalWebhookUrl || '';
     }
 
     // ─── Pub/Sub ────────────────────────────────────────────────
@@ -159,7 +195,11 @@ class AppStore {
                 return {
                     comments: parsed.comments || [],
                     tasks: parsed.tasks || [],
-                    teamMembers: parsed.teamMembers || [],
+                    teamMembers: (parsed.teamMembers || []).map(m => ({
+                        ...m,
+                        avatar: m.avatar || '',
+                        webhookUrl: m.webhookUrl || ''
+                    })),
                     currentUrl: parsed.currentUrl || '',
                     mode: parsed.mode || 'browse',
                     globalWebhookUrl: parsed.globalWebhookUrl || ''

@@ -33,9 +33,8 @@ const dialogPinNumber = $('#dialog-pin-number');
 const commentText = $('#comment-text');
 const commentAssignee = $('#comment-assignee');
 const commentPriority = $('#comment-priority');
-const webhookEnabled = $('#webhook-enabled');
-const webhookConfig = $('#webhook-config');
-const webhookUrl = $('#webhook-url');
+const webhookInfo = $('#webhook-info');
+const webhookInfoText = $('#webhook-info-text');
 const dialogClose = $('#dialog-close');
 const dialogCancel = $('#dialog-cancel');
 const dialogSave = $('#dialog-save');
@@ -43,13 +42,34 @@ const teamModal = $('#team-modal');
 const teamModalClose = $('#team-modal-close');
 const memberName = $('#member-name');
 const memberEmail = $('#member-email');
+const memberWebhook = $('#member-webhook');
+const avatarUpload = $('#avatar-upload');
+const avatarInput = $('#avatar-input');
+const avatarPreview = $('#avatar-preview');
 const addMemberBtn = $('#add-member-btn');
 const teamList = $('#team-list');
 const teamEmpty = $('#team-empty');
+const globalWebhookUrl = $('#global-webhook-url');
+const saveGlobalWebhook = $('#save-global-webhook');
 const toastContainer = $('#toast-container');
+
+// Edit member modal
+const editMemberModal = $('#edit-member-modal');
+const editMemberClose = $('#edit-member-close');
+const editMemberCancel = $('#edit-member-cancel');
+const editMemberSave = $('#edit-member-save');
+const editMemberId = $('#edit-member-id');
+const editMemberName = $('#edit-member-name');
+const editMemberEmail = $('#edit-member-email');
+const editMemberWebhook = $('#edit-member-webhook');
+const editAvatarUpload = $('#edit-avatar-upload');
+const editAvatarInput = $('#edit-avatar-input');
+const editAvatarPreview = $('#edit-avatar-preview');
 
 // ─── State ────────────────────────────────────────────────────
 let pendingCommentPosition = null;
+let pendingAvatarData = '';       // for add form
+let pendingEditAvatarData = '';   // for edit form
 
 // ─── Initialize ───────────────────────────────────────────────
 function init() {
@@ -98,13 +118,12 @@ function setupEventListeners() {
     dialogCancel.addEventListener('click', closeCommentDialog);
     dialogSave.addEventListener('click', handleSaveComment);
 
-    // Webhook toggle
-    webhookEnabled.addEventListener('change', () => {
-        webhookConfig.style.display = webhookEnabled.checked ? 'block' : 'none';
-    });
+    // Webhook info: update when assignee changes in comment dialog
+    commentAssignee.addEventListener('change', updateWebhookInfo);
 
     // Team modal
     teamBtn.addEventListener('click', () => {
+        globalWebhookUrl.value = store.globalWebhookUrl || '';
         teamModal.style.display = 'flex';
     });
     teamModalClose.addEventListener('click', () => {
@@ -114,10 +133,40 @@ function setupEventListeners() {
         if (e.target === teamModal) teamModal.style.display = 'none';
     });
 
+    // Global webhook save
+    saveGlobalWebhook.addEventListener('click', () => {
+        store.setGlobalWebhookUrl(globalWebhookUrl.value.trim());
+        showToast('Webhook globale salvato', 'success');
+    });
+
+    // Avatar upload (add form)
+    avatarUpload.addEventListener('click', () => avatarInput.click());
+    avatarInput.addEventListener('change', (e) => {
+        handleAvatarFile(e.target.files[0], avatarPreview, (data) => {
+            pendingAvatarData = data;
+        });
+    });
+
     // Add team member
     addMemberBtn.addEventListener('click', handleAddMember);
     memberEmail.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') handleAddMember();
+    });
+
+    // Edit member modal
+    editMemberClose.addEventListener('click', closeEditMemberModal);
+    editMemberCancel.addEventListener('click', closeEditMemberModal);
+    editMemberModal.addEventListener('click', (e) => {
+        if (e.target === editMemberModal) closeEditMemberModal();
+    });
+    editMemberSave.addEventListener('click', handleSaveEditMember);
+
+    // Avatar upload (edit form)
+    editAvatarUpload.addEventListener('click', () => editAvatarInput.click());
+    editAvatarInput.addEventListener('change', (e) => {
+        handleAvatarFile(e.target.files[0], editAvatarPreview, (data) => {
+            pendingEditAvatarData = data;
+        });
     });
 
     // Listen for navigation messages from iframe
@@ -133,6 +182,7 @@ function setupEventListeners() {
         if (e.key === 'Escape') {
             closeCommentDialog();
             teamModal.style.display = 'none';
+            closeEditMemberModal();
         }
     });
 }
@@ -147,9 +197,10 @@ function setupStoreListeners() {
         renderComments();
         renderPins();
         updateCounts();
-        // Trigger webhook if enabled
-        if (comment.webhookEnabled && comment.webhookUrl) {
-            triggerWebhook(comment);
+        // Trigger webhook: per-user or global
+        const webhookUrl = store.getWebhookUrlForComment(comment);
+        if (webhookUrl) {
+            triggerWebhook(webhookUrl, comment);
         }
     });
 
@@ -263,10 +314,37 @@ function handleOverlayClick(e) {
     commentText.value = '';
     commentAssignee.value = '';
     commentPriority.value = 'medium';
-    webhookEnabled.checked = false;
-    webhookConfig.style.display = 'none';
-    webhookUrl.value = store.globalWebhookUrl || '';
     commentText.focus();
+
+    // Update webhook info display
+    updateWebhookInfo();
+}
+
+// ─── Webhook Info in Comment Dialog ───────────────────────────
+function updateWebhookInfo() {
+    const assigneeId = commentAssignee.value;
+    let webhookUrl = '';
+    let infoText = '';
+
+    if (assigneeId) {
+        const member = store.getTeamMemberById(assigneeId);
+        if (member && member.webhookUrl) {
+            webhookUrl = member.webhookUrl;
+            infoText = `Webhook → ${member.name}`;
+        }
+    }
+
+    if (!webhookUrl && store.globalWebhookUrl) {
+        webhookUrl = store.globalWebhookUrl;
+        infoText = 'Webhook globale attivo';
+    }
+
+    if (webhookUrl) {
+        webhookInfo.style.display = 'flex';
+        webhookInfoText.textContent = infoText;
+    } else {
+        webhookInfo.style.display = 'none';
+    }
 }
 
 // ─── Save Comment ─────────────────────────────────────────────
@@ -282,9 +360,7 @@ function handleSaveComment() {
         x: pendingCommentPosition.x,
         y: pendingCommentPosition.y,
         assignee: commentAssignee.value,
-        priority: commentPriority.value,
-        webhookEnabled: webhookEnabled.checked,
-        webhookUrl: webhookUrl.value.trim()
+        priority: commentPriority.value
     });
 
     closeCommentDialog();
@@ -315,13 +391,22 @@ function renderComments() {
     commentsEmpty.style.display = 'none';
 
     commentsList.innerHTML = comments.map(comment => {
-        const assigneeName = comment.assignee
-            ? store.teamMembers.find(m => m.id === comment.assignee)?.name || ''
-            : '';
+        const member = comment.assignee
+            ? store.getTeamMemberById(comment.assignee)
+            : null;
+        const assigneeName = member ? member.name : '';
 
         const time = new Date(comment.createdAt);
         const timeStr = time.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         const dateStr = time.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' });
+
+        // Show webhook indicator if there's an active webhook for this comment
+        const webhookUrl = store.getWebhookUrlForComment(comment);
+
+        // Avatar display
+        const avatarHtml = member && member.avatar
+            ? `<img src="${member.avatar}" alt="${escapeHtml(assigneeName)}" class="comment-item__avatar-img" />`
+            : '';
 
         return `
       <div class="comment-item" data-id="${comment.id}">
@@ -331,14 +416,14 @@ function renderComments() {
           <div class="comment-item__meta">
             ${assigneeName ? `
               <span class="comment-item__assignee">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3" r="2" stroke="currentColor" stroke-width="1"/><path d="M1 9C1 7 2.5 5.5 5 5.5C7.5 5.5 9 7 9 9" stroke="currentColor" stroke-width="1"/></svg>
+                ${avatarHtml || `<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3" r="2" stroke="currentColor" stroke-width="1"/><path d="M1 9C1 7 2.5 5.5 5 5.5C7.5 5.5 9 7 9 9" stroke="currentColor" stroke-width="1"/></svg>`}
                 ${escapeHtml(assigneeName)}
               </span>
             ` : ''}
             <span class="comment-item__priority comment-item__priority--${comment.priority}">
               ${getPriorityLabel(comment.priority)}
             </span>
-            ${comment.webhookEnabled ? `
+            ${webhookUrl ? `
               <span class="comment-item__webhook">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 5L3.5 7.5L9 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                 Webhook
@@ -393,6 +478,7 @@ function renderTasks() {
     tasksList.innerHTML = tasks.map(task => {
         const comment = store.getCommentById(task.commentId);
         const commentNumber = comment ? comment.number : '?';
+        const member = task.assignee ? store.getTeamMemberById(task.assignee) : null;
 
         return `
       <div class="task-item ${task.completed ? 'completed' : ''}" data-id="${task.id}">
@@ -416,6 +502,7 @@ function renderTasks() {
             <span class="comment-item__priority comment-item__priority--${task.priority}">
               ${getPriorityLabel(task.priority)}
             </span>
+            ${member && member.webhookUrl ? `<span class="comment-item__webhook" title="Webhook personale"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 5L3.5 7.5L9 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>` : ''}
           </div>
         </div>
       </div>
@@ -500,39 +587,106 @@ function highlightComment(commentId) {
     }
 }
 
+// ─── Avatar Handling ──────────────────────────────────────────
+function handleAvatarFile(file, previewEl, onComplete) {
+    if (!file) return;
+
+    // Validate file
+    if (!file.type.startsWith('image/')) {
+        showToast('Seleziona un file immagine', 'warning');
+        return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('L\'immagine deve essere inferiore a 2MB', 'warning');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        // Resize to 128x128 for storage efficiency
+        resizeImage(e.target.result, 128, (resizedData) => {
+            previewEl.innerHTML = `<img src="${resizedData}" alt="Avatar" />`;
+            previewEl.classList.add('has-image');
+            onComplete(resizedData);
+        });
+    };
+    reader.readAsDataURL(file);
+}
+
+function resizeImage(dataUrl, maxSize, callback) {
+    const img = new Image();
+    img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = Math.min(img.width, img.height);
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext('2d');
+
+        // Crop to square from center
+        const sx = (img.width - size) / 2;
+        const sy = (img.height - size) / 2;
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, maxSize, maxSize);
+
+        callback(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.src = dataUrl;
+}
+
 // ─── Render Team ──────────────────────────────────────────────
 function renderTeam() {
     const members = store.teamMembers;
 
     if (members.length === 0) {
         teamEmpty.style.display = 'block';
-        // Remove all team-member elements
         teamList.querySelectorAll('.team-member').forEach(el => el.remove());
         return;
     }
 
     teamEmpty.style.display = 'none';
 
-    // Keep the empty message element, replace rest
+    // Remove existing member elements
     const existingMembers = teamList.querySelectorAll('.team-member');
     existingMembers.forEach(el => el.remove());
 
     members.forEach(member => {
         const el = document.createElement('div');
         el.className = 'team-member';
+
+        const avatarContent = member.avatar
+            ? `<img src="${member.avatar}" alt="${escapeHtml(member.name)}" />`
+            : member.initials;
+
         el.innerHTML = `
-      <div class="team-member__avatar">${member.initials}</div>
+      <div class="team-member__avatar ${member.avatar ? 'has-image' : ''}">${avatarContent}</div>
       <div class="team-member__info">
         <div class="team-member__name">${escapeHtml(member.name)}</div>
-        <div class="team-member__email">${escapeHtml(member.email)}</div>
+        <div class="team-member__email">${escapeHtml(member.email || '—')}</div>
+        ${member.webhookUrl ? `<div class="team-member__webhook-badge">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 5L3.5 7.5L9 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Webhook
+        </div>` : ''}
       </div>
-      <button class="team-member__remove" data-id="${member.id}" title="Rimuovi">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </button>
+      <div class="team-member__actions">
+        <button class="team-member__edit" data-id="${member.id}" title="Modifica">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="team-member__remove" data-id="${member.id}" title="Rimuovi">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
     `;
         teamList.appendChild(el);
+    });
+
+    // Edit listeners
+    teamList.querySelectorAll('.team-member__edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            openEditMemberModal(btn.dataset.id);
+        });
     });
 
     // Remove listeners
@@ -547,17 +701,83 @@ function renderTeam() {
 function handleAddMember() {
     const name = memberName.value.trim();
     const email = memberEmail.value.trim();
+    const webhook = memberWebhook.value.trim();
 
     if (!name) {
         showToast('Inserisci un nome', 'warning');
         return;
     }
 
-    store.addTeamMember(name, email || '');
+    store.addTeamMember(name, email || '', pendingAvatarData, webhook);
+
+    // Reset form
     memberName.value = '';
     memberEmail.value = '';
+    memberWebhook.value = '';
+    pendingAvatarData = '';
+    avatarPreview.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M10 5V15M5 10H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    `;
+    avatarPreview.classList.remove('has-image');
+    avatarInput.value = '';
+
     memberName.focus();
     showToast(`${name} aggiunto al team`, 'success');
+}
+
+// ─── Edit Member Modal ────────────────────────────────────────
+function openEditMemberModal(memberId) {
+    const member = store.getTeamMemberById(memberId);
+    if (!member) return;
+
+    editMemberId.value = memberId;
+    editMemberName.value = member.name;
+    editMemberEmail.value = member.email || '';
+    editMemberWebhook.value = member.webhookUrl || '';
+    pendingEditAvatarData = member.avatar || '';
+
+    // Show avatar
+    if (member.avatar) {
+        editAvatarPreview.innerHTML = `<img src="${member.avatar}" alt="Avatar" />`;
+        editAvatarPreview.classList.add('has-image');
+    } else {
+        editAvatarPreview.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        `;
+        editAvatarPreview.classList.remove('has-image');
+    }
+    editAvatarInput.value = '';
+
+    editMemberModal.style.display = 'flex';
+}
+
+function closeEditMemberModal() {
+    editMemberModal.style.display = 'none';
+    pendingEditAvatarData = '';
+}
+
+function handleSaveEditMember() {
+    const memberId = editMemberId.value;
+    const name = editMemberName.value.trim();
+
+    if (!name) {
+        showToast('Il nome è obbligatorio', 'warning');
+        return;
+    }
+
+    store.updateTeamMember(memberId, {
+        name,
+        email: editMemberEmail.value.trim(),
+        webhookUrl: editMemberWebhook.value.trim(),
+        avatar: pendingEditAvatarData
+    });
+
+    closeEditMemberModal();
+    showToast('Membro aggiornato', 'success');
 }
 
 function updateAssigneeDropdowns() {
@@ -570,8 +790,17 @@ function updateAssigneeDropdowns() {
 }
 
 // ─── Webhook ──────────────────────────────────────────────────
-async function triggerWebhook(comment) {
-    const result = await WebhookService.sendWebhook(comment.webhookUrl, comment);
+async function triggerWebhook(webhookUrl, comment) {
+    const member = comment.assignee ? store.getTeamMemberById(comment.assignee) : null;
+
+    const payload = {
+        ...comment,
+        assigneeName: member ? member.name : 'Non assegnato',
+        assigneeEmail: member ? member.email : '',
+        webhookType: member && member.webhookUrl ? 'personal' : 'global'
+    };
+
+    const result = await WebhookService.sendWebhook(webhookUrl, payload);
     if (result.success) {
         showToast('Webhook inviato con successo', 'success');
     } else {
