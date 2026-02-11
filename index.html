@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Markup Comments — A minimal web annotation tool to comment on any webpage, manage tasks, and integrate with webhooks.">
+  <title>Markup Comments</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Toolbar -->
+    <header id="toolbar" class="toolbar">
+      <div class="toolbar__left">
+        <div class="toolbar__logo">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="8" fill="#6C5CE7"/>
+            <path d="M8 14L12 18L20 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="toolbar__title">Markup</span>
+        </div>
+      </div>
+      <div class="toolbar__center">
+        <div class="toolbar__url-bar">
+          <svg class="toolbar__url-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6.5 11.5L4.5 13.5C3.67 14.33 2.33 14.33 1.5 13.5C0.67 12.67 0.67 11.33 1.5 10.5L5.5 6.5C6.33 5.67 7.67 5.67 8.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M9.5 4.5L11.5 2.5C12.33 1.67 13.67 1.67 14.5 2.5C15.33 3.33 15.33 4.67 14.5 5.5L10.5 9.5C9.67 10.33 8.33 10.33 7.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <input type="text" id="url-input" class="toolbar__url-input" placeholder="Inserisci URL della pagina (es. https://example.com)" />
+          <button id="load-url-btn" class="toolbar__load-btn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 8H14M10 4L14 8L10 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Carica
+          </button>
+        </div>
+      </div>
+      <div class="toolbar__right">
+        <div class="toolbar__mode-toggle" id="mode-toggle">
+          <button class="mode-btn active" data-mode="browse">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 3C2 2.45 2.45 2 3 2H13C13.55 2 14 2.45 14 3V11C14 11.55 13.55 12 13 12H3C2.45 12 2 11.55 2 11V3Z" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M2 14H14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+            Browse
+          </button>
+          <button class="mode-btn" data-mode="comment">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M14 10C14 10.35 13.86 10.69 13.61 10.94C13.36 11.19 13.02 11.33 12.67 11.33H4.67L2 14V3.33C2 2.98 2.14 2.64 2.39 2.39C2.64 2.14 2.98 2 3.33 2H12.67C13.02 2 13.36 2.14 13.61 2.39C13.86 2.64 14 2.98 14 3.33V10Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Comment
+          </button>
+        </div>
+        <button id="team-btn" class="toolbar__icon-btn" title="Gestisci team">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M12.75 15.75V14.25C12.75 13.4544 12.4339 12.6913 11.8713 12.1287C11.3087 11.5661 10.5456 11.25 9.75 11.25H3.75C2.95435 11.25 2.19129 11.5661 1.62868 12.1287C1.06607 12.6913 0.75 13.4544 0.75 14.25V15.75" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="6.75" cy="5.25" r="3" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M17.25 15.75V14.25C17.2495 13.5853 17.0283 12.9396 16.621 12.4143C16.2138 11.889 15.6436 11.5137 15 11.3475" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 2.3475C12.6453 2.51264 13.2173 2.88801 13.6257 3.41426C14.0342 3.94051 14.2559 4.58783 14.2559 5.25375C14.2559 5.91967 14.0342 6.56699 13.6257 7.09324C13.2173 7.61949 12.6453 7.99486 12 8.16" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-layout">
+      <!-- Sidebar -->
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar__tabs">
+          <button class="sidebar__tab active" data-tab="comments">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M12.25 8.75C12.25 9.05 12.13 9.34 11.91 9.56C11.69 9.78 11.4 9.92 11.08 9.92H3.92L1.75 12.25V2.92C1.75 2.59 1.87 2.28 2.09 2.06C2.31 1.84 2.6 1.75 2.92 1.75H11.08C11.4 1.75 11.69 1.87 11.91 2.09C12.13 2.31 12.25 2.6 12.25 2.92V8.75Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Commenti
+            <span class="sidebar__tab-count" id="comment-count">0</span>
+          </button>
+          <button class="sidebar__tab" data-tab="tasks">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M5.25 2.33H2.92C2.27 2.33 1.75 2.85 1.75 3.5V11.08C1.75 11.73 2.27 12.25 2.92 12.25H10.5C11.15 12.25 11.67 11.73 11.67 11.08V3.5C11.67 2.85 11.15 2.33 10.5 2.33H8.17" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="4.67" y="1.17" width="4.08" height="2.33" rx="0.58" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M4.67 7L6.42 8.75L9.33 5.83" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Tasks
+            <span class="sidebar__tab-count" id="task-count">0</span>
+          </button>
+        </div>
+
+        <!-- Comments Panel -->
+        <div class="sidebar__panel active" id="comments-panel">
+          <div class="sidebar__empty" id="comments-empty">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <rect x="4" y="4" width="40" height="40" rx="12" fill="#F0EDFF"/>
+              <path d="M32 22C32 22.53 31.79 23.04 31.41 23.41C31.04 23.79 30.53 24 30 24H20L16 28V16C16 15.47 16.21 14.96 16.59 14.59C16.96 14.21 17.47 14 18 14H30C30.53 14 31.04 14.21 31.41 14.59C31.79 14.96 32 15.47 32 16V22Z" stroke="#6C5CE7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <p>Nessun commento ancora</p>
+            <span>Passa alla modalità Comment e clicca sulla pagina per aggiungere un commento</span>
+          </div>
+          <div class="sidebar__list" id="comments-list"></div>
+        </div>
+
+        <!-- Tasks Panel -->
+        <div class="sidebar__panel" id="tasks-panel">
+          <div class="sidebar__empty" id="tasks-empty">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <rect x="4" y="4" width="40" height="40" rx="12" fill="#F0EDFF"/>
+              <path d="M21 15H17C16.45 15 16 15.45 16 16V32C16 32.55 16.45 33 17 33H31C31.55 33 32 32.55 32 32V16C32 15.45 31.55 15 31 15H27" stroke="#6C5CE7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="21" y="13" width="6" height="4" rx="1" stroke="#6C5CE7" stroke-width="2"/>
+              <path d="M20 24L23 27L28 22" stroke="#6C5CE7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <p>Nessun task ancora</p>
+            <span>I task vengono creati automaticamente quando aggiungi un commento</span>
+          </div>
+          <div class="sidebar__list" id="tasks-list"></div>
+        </div>
+      </aside>
+
+      <!-- Viewport -->
+      <main class="viewport" id="viewport">
+        <div class="viewport__empty" id="viewport-empty">
+          <div class="viewport__empty-content">
+            <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+              <rect x="8" y="8" width="64" height="64" rx="16" fill="#F0EDFF"/>
+              <path d="M40 25V55M25 40H55" stroke="#6C5CE7" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <h2>Inserisci un URL per iniziare</h2>
+            <p>Incolla il link di qualsiasi pagina web nella barra in alto e clicca "Carica"</p>
+          </div>
+        </div>
+        <div class="viewport__frame-wrapper" id="frame-wrapper" style="display:none;">
+          <iframe id="page-frame" class="viewport__frame" sandbox="allow-same-origin allow-scripts allow-forms"></iframe>
+          <div class="viewport__overlay" id="comment-overlay" style="display:none;"></div>
+          <div class="viewport__pins" id="pins-container"></div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Comment Dialog -->
+    <div class="comment-dialog" id="comment-dialog" style="display:none;">
+      <div class="comment-dialog__header">
+        <span class="comment-dialog__pin-number" id="dialog-pin-number">1</span>
+        <span class="comment-dialog__title">Nuovo commento</span>
+        <button class="comment-dialog__close" id="dialog-close">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="comment-dialog__body">
+        <textarea id="comment-text" class="comment-dialog__textarea" placeholder="Scrivi il tuo commento..." rows="3"></textarea>
+        <div class="comment-dialog__field">
+          <label>Assegna a</label>
+          <select id="comment-assignee" class="comment-dialog__select">
+            <option value="">Nessuno</option>
+          </select>
+        </div>
+        <div class="comment-dialog__field">
+          <label>Priorità</label>
+          <select id="comment-priority" class="comment-dialog__select">
+            <option value="low">Bassa</option>
+            <option value="medium" selected>Media</option>
+            <option value="high">Alta</option>
+            <option value="urgent">Urgente</option>
+          </select>
+        </div>
+        <div class="comment-dialog__webhook">
+          <div class="comment-dialog__webhook-toggle">
+            <label class="toggle">
+              <input type="checkbox" id="webhook-enabled">
+              <span class="toggle__slider"></span>
+            </label>
+            <span>Webhook ClickUp</span>
+          </div>
+          <div class="comment-dialog__webhook-config" id="webhook-config" style="display:none;">
+            <input type="text" id="webhook-url" class="comment-dialog__input" placeholder="URL webhook ClickUp..." />
+          </div>
+        </div>
+      </div>
+      <div class="comment-dialog__footer">
+        <button class="btn btn--ghost" id="dialog-cancel">Annulla</button>
+        <button class="btn btn--primary" id="dialog-save">Salva commento</button>
+      </div>
+    </div>
+
+    <!-- Team Manager Modal -->
+    <div class="modal-overlay" id="team-modal" style="display:none;">
+      <div class="modal">
+        <div class="modal__header">
+          <h3>Gestisci Team</h3>
+          <button class="modal__close" id="team-modal-close">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal__body">
+          <div class="modal__add-form">
+            <input type="text" id="member-name" class="modal__input" placeholder="Nome" />
+            <input type="email" id="member-email" class="modal__input" placeholder="Email" />
+            <button class="btn btn--primary btn--sm" id="add-member-btn">Aggiungi</button>
+          </div>
+          <div class="modal__list" id="team-list">
+            <div class="modal__empty" id="team-empty">
+              <p>Nessun membro del team</p>
+              <span>Aggiungi persone per assegnare i commenti</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div class="toast-container" id="toast-container"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
