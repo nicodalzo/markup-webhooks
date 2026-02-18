@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// SupabaseService — Cloud database for persistence
+// SupabaseService — Cloud database for persistence (multi-user)
 // ═══════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
@@ -21,8 +21,16 @@ export class SupabaseService {
         return supabase !== null;
     }
 
+    /** Get current user ID from Supabase Auth session */
+    static async _getUserId() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+        return user.id;
+    }
+
     // ─── Team Members ─────────────────────────────────────────
     static async getTeamMembers() {
+        // RLS auto-filters by user_id
         const { data, error } = await supabase
             .from('team_members')
             .select('*')
@@ -32,9 +40,10 @@ export class SupabaseService {
     }
 
     static async addTeamMember(member) {
+        const userId = await this._getUserId();
         const { data, error } = await supabase
             .from('team_members')
-            .insert(this._mapMemberToDb(member))
+            .insert({ ...this._mapMemberToDb(member), user_id: userId })
             .select()
             .single();
         if (error) throw error;
@@ -77,9 +86,10 @@ export class SupabaseService {
     }
 
     static async addComment(comment) {
+        const userId = await this._getUserId();
         const { data, error } = await supabase
             .from('comments')
-            .insert(this._mapCommentToDb(comment))
+            .insert({ ...this._mapCommentToDb(comment), user_id: userId })
             .select()
             .single();
         if (error) throw error;
@@ -87,7 +97,6 @@ export class SupabaseService {
     }
 
     static async removeComment(id) {
-        // Also remove associated task
         await supabase.from('tasks').delete().eq('comment_id', id);
         const { error } = await supabase
             .from('comments')
@@ -107,9 +116,10 @@ export class SupabaseService {
     }
 
     static async addTask(task) {
+        const userId = await this._getUserId();
         const { data, error } = await supabase
             .from('tasks')
-            .insert(this._mapTaskToDb(task))
+            .insert({ ...this._mapTaskToDb(task), user_id: userId })
             .select()
             .single();
         if (error) throw error;
@@ -140,9 +150,10 @@ export class SupabaseService {
     }
 
     static async setSetting(key, value) {
+        const userId = await this._getUserId();
         const { error } = await supabase
             .from('settings')
-            .upsert({ key, value }, { onConflict: 'key' });
+            .upsert({ user_id: userId, key, value }, { onConflict: 'user_id,key' });
         if (error) throw error;
     }
 

@@ -14,7 +14,59 @@
 </head>
 
 <body>
-  <div id="app">
+  <!-- Auth Screen -->
+  <div class="auth-screen" id="auth-screen">
+    <div class="auth-card">
+      <div class="auth-card__logo">
+        <svg width="40" height="40" viewBox="0 0 28 28" fill="none">
+          <rect width="28" height="28" rx="8" fill="#6C5CE7" />
+          <path d="M8 14L12 18L20 10" stroke="white" stroke-width="2.5" stroke-linecap="round"
+            stroke-linejoin="round" />
+        </svg>
+        <h1>Markup</h1>
+      </div>
+      <p class="auth-card__subtitle">Accedi al tuo workspace</p>
+
+      <!-- Login Form -->
+      <form class="auth-form" id="login-form">
+        <div class="auth-form__field">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="nome@esempio.com" required />
+        </div>
+        <div class="auth-form__field">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="La tua password" required minlength="6" />
+        </div>
+        <div class="auth-form__error" id="login-error" style="display:none;"></div>
+        <button type="submit" class="btn btn--primary auth-form__submit" id="login-submit">Accedi</button>
+      </form>
+
+      <!-- Signup Form -->
+      <form class="auth-form" id="signup-form" style="display:none;">
+        <div class="auth-form__field">
+          <label for="signup-email">Email</label>
+          <input type="email" id="signup-email" placeholder="nome@esempio.com" required />
+        </div>
+        <div class="auth-form__field">
+          <label for="signup-password">Password</label>
+          <input type="password" id="signup-password" placeholder="Minimo 6 caratteri" required minlength="6" />
+        </div>
+        <div class="auth-form__field">
+          <label for="signup-password-confirm">Conferma password</label>
+          <input type="password" id="signup-password-confirm" placeholder="Ripeti la password" required minlength="6" />
+        </div>
+        <div class="auth-form__error" id="signup-error" style="display:none;"></div>
+        <button type="submit" class="btn btn--primary auth-form__submit" id="signup-submit">Crea account</button>
+      </form>
+
+      <div class="auth-card__toggle">
+        <span id="auth-toggle-text">Non hai un account?</span>
+        <button type="button" class="auth-card__toggle-btn" id="auth-toggle-btn">Registrati</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" style="display:none;">
     <!-- Toolbar -->
     <header id="toolbar" class="toolbar">
       <div class="toolbar__left">
@@ -82,6 +134,16 @@
               stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
+        <div class="toolbar__user" id="toolbar-user">
+          <span class="toolbar__user-email" id="toolbar-user-email"></span>
+          <button class="toolbar__icon-btn" id="logout-btn" title="Logout">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M6 14H3.33C2.97 14 2.64 13.86 2.39 13.61C2.14 13.36 2 13.02 2 12.67V3.33C2 2.97 2.14 2.64 2.39 2.39C2.64 2.14 2.97 2 3.33 2H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M10.67 11.33L14 8L10.67 4.67" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M14 8H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </header>
 

@@ -5,6 +5,7 @@
 import { store } from './store/AppStore.js';
 import { ProxyService } from './services/ProxyService.js';
 import { WebhookService } from './services/WebhookService.js';
+import { AuthService } from './services/AuthService.js';
 
 // ─── DOM References ─────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
@@ -66,6 +67,18 @@ const editAvatarUpload = $('#edit-avatar-upload');
 const editAvatarInput = $('#edit-avatar-input');
 const editAvatarPreview = $('#edit-avatar-preview');
 
+// Auth elements
+const authScreen = $('#auth-screen');
+const appContainer = $('#app');
+const loginForm = $('#login-form');
+const signupForm = $('#signup-form');
+const loginError = $('#login-error');
+const signupError = $('#signup-error');
+const authToggleBtn = $('#auth-toggle-btn');
+const authToggleText = $('#auth-toggle-text');
+const toolbarUserEmail = $('#toolbar-user-email');
+const logoutBtn = $('#logout-btn');
+
 // ─── State ────────────────────────────────────────────────────
 let pendingCommentPosition = null;
 let pendingAvatarData = '';       // for add form
@@ -74,8 +87,39 @@ let activeTagFilter = '';         // current tag filter
 
 // ─── Initialize ───────────────────────────────────────────────
 async function init() {
-    setupEventListeners();
-    setupStoreListeners();
+    setupAuthListeners();
+
+    // Check if user is already authenticated
+    const session = await AuthService.getSession();
+
+    if (session) {
+        await showApp(session.user);
+    } else {
+        showAuth();
+    }
+
+    // Listen for auth state changes
+    AuthService.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+            await showApp(session.user);
+        } else if (event === 'SIGNED_OUT') {
+            showAuth();
+        }
+    });
+}
+
+let _appInitialized = false;
+
+async function showApp(user) {
+    authScreen.style.display = 'none';
+    appContainer.style.display = 'block';
+    toolbarUserEmail.textContent = user.email;
+
+    if (!_appInitialized) {
+        setupEventListeners();
+        setupStoreListeners();
+        _appInitialized = true;
+    }
 
     // Load data from Supabase (or localStorage fallback)
     await store.init();
@@ -86,6 +130,99 @@ async function init() {
     renderTasks();
     renderTeam();
     updateAssigneeDropdowns();
+}
+
+function showAuth() {
+    authScreen.style.display = 'flex';
+    appContainer.style.display = 'none';
+}
+
+// ─── Auth Listeners ───────────────────────────────────────────
+function setupAuthListeners() {
+    // Login form
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginError.style.display = 'none';
+        const email = $('#login-email').value.trim();
+        const password = $('#login-password').value;
+        const submitBtn = $('#login-submit');
+
+        try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Accesso in corso...';
+            await AuthService.signIn(email, password);
+        } catch (err) {
+            loginError.textContent = getAuthErrorMessage(err);
+            loginError.style.display = 'block';
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Accedi';
+        }
+    });
+
+    // Signup form
+    signupForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        signupError.style.display = 'none';
+        const email = $('#signup-email').value.trim();
+        const password = $('#signup-password').value;
+        const confirm = $('#signup-password-confirm').value;
+        const submitBtn = $('#signup-submit');
+
+        if (password !== confirm) {
+            signupError.textContent = 'Le password non coincidono';
+            signupError.style.display = 'block';
+            return;
+        }
+
+        try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creazione account...';
+            await AuthService.signUp(email, password);
+            showToast('Account creato! Effettua il login.', 'success');
+            // Switch to login form
+            authToggleBtn.click();
+        } catch (err) {
+            signupError.textContent = getAuthErrorMessage(err);
+            signupError.style.display = 'block';
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Crea account';
+        }
+    });
+
+    // Toggle login/signup
+    authToggleBtn.addEventListener('click', () => {
+        const isLogin = loginForm.style.display !== 'none';
+        loginForm.style.display = isLogin ? 'none' : 'block';
+        signupForm.style.display = isLogin ? 'block' : 'none';
+        authToggleText.textContent = isLogin ? 'Hai già un account?' : 'Non hai un account?';
+        authToggleBtn.textContent = isLogin ? 'Accedi' : 'Registrati';
+        loginError.style.display = 'none';
+        signupError.style.display = 'none';
+    });
+
+    // Logout
+    logoutBtn.addEventListener('click', async () => {
+        try {
+            await AuthService.signOut();
+            // Clear local state
+            store.clearAll();
+            showAuth();
+            showToast('Logout effettuato', 'info');
+        } catch (err) {
+            showToast('Errore durante il logout', 'error');
+        }
+    });
+}
+
+function getAuthErrorMessage(err) {
+    const msg = err.message || '';
+    if (msg.includes('Invalid login credentials')) return 'Email o password non corretti';
+    if (msg.includes('User already registered')) return 'Questa email è già registrata';
+    if (msg.includes('Password should be at least')) return 'La password deve avere almeno 6 caratteri';
+    if (msg.includes('Unable to validate email')) return 'Indirizzo email non valido';
+    return msg || 'Si è verificato un errore. Riprova.';
 }
 
 // ─── Event Listeners ──────────────────────────────────────────
