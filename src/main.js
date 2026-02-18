@@ -114,7 +114,7 @@ let _appInitialized = false;
 
 async function showApp(user) {
     authScreen.style.display = 'none';
-    appContainer.style.display = 'block';
+    appContainer.style.display = 'flex';
     toolbarUserEmail.textContent = user.email;
 
     if (!_appInitialized) {
