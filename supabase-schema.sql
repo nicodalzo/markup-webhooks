@@ -43,6 +43,7 @@ CREATE TABLE comments (
     assignee TEXT DEFAULT NULL,
     priority TEXT DEFAULT 'medium',
     tags TEXT DEFAULT '[]',
+    folder_id TEXT DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (id, user_id)
 );
@@ -68,6 +69,17 @@ CREATE TABLE settings (
     PRIMARY KEY (user_id, key)
 );
 
+-- Folders (per user, for organizing comments)
+CREATE TABLE folders (
+    id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    color TEXT DEFAULT '#6C5CE7',
+    position INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (id, user_id)
+);
+
 -- ═══════════════════════════════════════════════════════════════
 -- STEP 3: Enable RLS and create per-user policies
 -- ═══════════════════════════════════════════════════════════════
@@ -76,6 +88,7 @@ ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE folders ENABLE ROW LEVEL SECURITY;
 
 -- Each user can only see/modify their own data
 CREATE POLICY "Users manage own team_members"
@@ -95,5 +108,10 @@ CREATE POLICY "Users manage own tasks"
 
 CREATE POLICY "Users manage own settings"
     ON settings FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users manage own folders"
+    ON folders FOR ALL
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);

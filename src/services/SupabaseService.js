@@ -157,6 +157,58 @@ export class SupabaseService {
         if (error) throw error;
     }
 
+    // ─── Folders ───────────────────────────────────────────────
+    static async getFolders() {
+        const { data, error } = await supabase
+            .from('folders')
+            .select('*')
+            .order('position', { ascending: true });
+        if (error) throw error;
+        return (data || []).map(this._mapFolderFromDb);
+    }
+
+    static async addFolder(folder) {
+        const userId = await this._getUserId();
+        const { data, error } = await supabase
+            .from('folders')
+            .insert({ ...this._mapFolderToDb(folder), user_id: userId })
+            .select()
+            .single();
+        if (error) throw error;
+        return this._mapFolderFromDb(data);
+    }
+
+    static async updateFolder(id, updates) {
+        const dbUpdates = {};
+        if (updates.name !== undefined) dbUpdates.name = updates.name;
+        if (updates.color !== undefined) dbUpdates.color = updates.color;
+        if (updates.position !== undefined) dbUpdates.position = updates.position;
+
+        const { error } = await supabase
+            .from('folders')
+            .update(dbUpdates)
+            .eq('id', id);
+        if (error) throw error;
+    }
+
+    static async removeFolder(id) {
+        // Unassign comments from this folder
+        await supabase.from('comments').update({ folder_id: null }).eq('folder_id', id);
+        const { error } = await supabase
+            .from('folders')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+    }
+
+    static async updateCommentFolder(commentId, folderId) {
+        const { error } = await supabase
+            .from('comments')
+            .update({ folder_id: folderId })
+            .eq('id', commentId);
+        if (error) throw error;
+    }
+
     // ─── Data Mappers (DB ↔ JS) ──────────────────────────────
 
     static _mapMemberFromDb(row) {
@@ -192,6 +244,7 @@ export class SupabaseService {
             assignee: row.assignee || '',
             priority: row.priority || 'medium',
             tags: row.tags ? JSON.parse(row.tags) : [],
+            folderId: row.folder_id || null,
             createdAt: row.created_at
         };
     }
@@ -207,7 +260,26 @@ export class SupabaseService {
             assignee: comment.assignee || null,
             priority: comment.priority || 'medium',
             tags: JSON.stringify(comment.tags || []),
+            folder_id: comment.folderId || null,
             created_at: comment.createdAt
+        };
+    }
+
+    static _mapFolderFromDb(row) {
+        return {
+            id: row.id,
+            name: row.name,
+            color: row.color || '#6C5CE7',
+            position: row.position || 0
+        };
+    }
+
+    static _mapFolderToDb(folder) {
+        return {
+            id: folder.id,
+            name: folder.name,
+            color: folder.color || '#6C5CE7',
+            position: folder.position || 0
         };
     }
 

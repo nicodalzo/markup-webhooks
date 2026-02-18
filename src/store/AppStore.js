@@ -24,10 +24,11 @@ class AppStore {
         }
 
         try {
-            const [teamMembers, comments, tasks, globalWebhookUrl, currentUrl] = await Promise.all([
+            const [teamMembers, comments, tasks, folders, globalWebhookUrl, currentUrl] = await Promise.all([
                 SupabaseService.getTeamMembers(),
                 SupabaseService.getComments(),
                 SupabaseService.getTasks(),
+                SupabaseService.getFolders(),
                 SupabaseService.getSetting('globalWebhookUrl'),
                 SupabaseService.getSetting('currentUrl')
             ]);
@@ -35,6 +36,7 @@ class AppStore {
             this.state.teamMembers = teamMembers;
             this.state.comments = comments;
             this.state.tasks = tasks;
+            this.state.folders = folders;
             this.state.globalWebhookUrl = globalWebhookUrl || '';
             this.state.currentUrl = currentUrl || this.state.currentUrl;
             this.dbReady = true;
@@ -48,6 +50,7 @@ class AppStore {
             this._emit('teamUpdated');
             this._emit('commentsUpdated');
             this._emit('tasksUpdated');
+            this._emit('foldersUpdated');
             this._emit('countsChanged');
         } catch (err) {
             console.warn('⚠️ Supabase load failed, using localStorage:', err.message);
@@ -58,6 +61,7 @@ class AppStore {
     get comments() { return this.state.comments; }
     get tasks() { return this.state.tasks; }
     get teamMembers() { return this.state.teamMembers; }
+    get folders() { return this.state.folders; }
     get currentUrl() { return this.state.currentUrl; }
     get mode() { return this.state.mode; }
     get globalWebhookUrl() { return this.state.globalWebhookUrl; }
@@ -89,6 +93,7 @@ class AppStore {
             assignee: comment.assignee || '',
             priority: comment.priority || 'medium',
             tags: comment.tags || [],
+            folderId: comment.folderId || null,
             createdAt: new Date().toISOString(),
             resolved: false
         };
@@ -137,6 +142,43 @@ class AppStore {
 
     getCommentById(id) {
         return this.state.comments.find(c => c.id === id);
+    }
+
+    // ─── Folders ─────────────────────────────────────────────
+    addFolder(name, color = '#6C5CE7') {
+        const folder = {
+            id: this._generateId(),
+            name,
+            color,
+            position: this.state.folders.length
+        };
+        this.state.folders.push(folder);
+        this._saveLocal();
+        this._dbSave(() => SupabaseService.addFolder(folder));
+        this._emit('foldersUpdated');
+        return folder;
+    }
+
+    removeFolder(folderId) {
+        this.state.folders = this.state.folders.filter(f => f.id !== folderId);
+        // Unassign comments from deleted folder
+        this.state.comments.forEach(c => {
+            if (c.folderId === folderId) c.folderId = null;
+        });
+        this._saveLocal();
+        this._dbSave(() => SupabaseService.removeFolder(folderId));
+        this._emit('foldersUpdated');
+        this._emit('commentsUpdated');
+    }
+
+    moveCommentToFolder(commentId, folderId) {
+        const comment = this.state.comments.find(c => c.id === commentId);
+        if (!comment) return;
+        comment.folderId = folderId;
+        this._saveLocal();
+        this._dbSave(() => SupabaseService.updateCommentFolder(commentId, folderId));
+        this._emit('commentsUpdated');
+        this._emit('foldersUpdated');
     }
 
     // ─── Tasks ──────────────────────────────────────────────────
@@ -278,6 +320,7 @@ class AppStore {
                         avatar: m.avatar || '',
                         webhookUrl: m.webhookUrl || ''
                     })),
+                    folders: parsed.folders || [],
                     currentUrl: parsed.currentUrl || '',
                     mode: parsed.mode || 'browse',
                     globalWebhookUrl: parsed.globalWebhookUrl || ''
@@ -290,6 +333,7 @@ class AppStore {
             comments: [],
             tasks: [],
             teamMembers: [],
+            folders: [],
             currentUrl: '',
             mode: 'browse',
             globalWebhookUrl: ''
@@ -305,14 +349,16 @@ class AppStore {
         this.state = {
             comments: [],
             tasks: [],
-            teamMembers: this.state.teamMembers,
+            teamMembers: [],
+            folders: [],
             currentUrl: '',
             mode: 'browse',
-            globalWebhookUrl: this.state.globalWebhookUrl
+            globalWebhookUrl: ''
         };
         this._saveLocal();
         this._emit('commentsUpdated');
         this._emit('tasksUpdated');
+        this._emit('foldersUpdated');
         this._emit('countsChanged');
     }
 }

@@ -84,6 +84,8 @@ let pendingCommentPosition = null;
 let pendingAvatarData = '';       // for add form
 let pendingEditAvatarData = '';   // for edit form
 let activeTagFilter = '';         // current tag filter
+let activeFolderId = 'all';      // current folder filter
+let taskSearchQuery = '';         // task search query
 
 // ─── Initialize ───────────────────────────────────────────────
 async function init() {
@@ -127,6 +129,7 @@ async function showApp(user) {
     restoreState();
     updateCounts();
     renderComments();
+    renderFolders();
     renderTasks();
     renderTeam();
     updateAssigneeDropdowns();
@@ -266,6 +269,12 @@ function setupEventListeners() {
         renderComments();
     });
 
+    // Task search
+    $('#task-search-input').addEventListener('input', (e) => {
+        taskSearchQuery = e.target.value;
+        renderTasks();
+    });
+
     // Webhook info: update when assignee changes in comment dialog
     commentAssignee.addEventListener('change', updateWebhookInfo);
 
@@ -354,6 +363,7 @@ function setupStoreListeners() {
 
     store.on('commentsUpdated', () => {
         renderComments();
+        renderFolders();
         renderPins();
         updateCounts();
     });
@@ -373,6 +383,12 @@ function setupStoreListeners() {
     });
 
     store.on('countsChanged', () => {
+        updateCounts();
+    });
+
+    store.on('foldersUpdated', () => {
+        renderFolders();
+        renderComments();
         updateCounts();
     });
 }
@@ -537,6 +553,11 @@ function closeCommentDialog() {
 function renderComments() {
     let comments = store.comments;
 
+    // Folder filter
+    if (activeFolderId && activeFolderId !== 'all') {
+        comments = comments.filter(c => c.folderId === activeFolderId);
+    }
+
     // Tag filter
     const filterBar = $('#filter-bar');
     const filterTagsEl = $('#filter-tags');
@@ -591,14 +612,21 @@ function renderComments() {
             `<span class="comment-item__tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`
         ).join('');
 
+        // Folder dot
+        const folder = comment.folderId ? store.folders.find(f => f.id === comment.folderId) : null;
+        const folderDotHtml = folder
+            ? `<span class="comment-item__folder-dot" style="background:${folder.color}" title="${escapeHtml(folder.name)}"></span>`
+            : '';
+
         return `
-      <div class="comment-item" data-id="${comment.id}">
+      <div class="comment-item" data-id="${comment.id}" draggable="true">
         <div class="comment-item__pin">${comment.number}</div>
         <div class="comment-item__content">
           <div class="comment-item__text">${escapeHtml(comment.text)}</div>
           ${urlHtml ? `<div class="comment-item__url-row">${urlHtml}</div>` : ''}
           ${tagsHtml ? `<div class="comment-item__tags">${tagsHtml}</div>` : ''}
           <div class="comment-item__meta">
+            ${folderDotHtml}
             ${assigneeName ? `
               <span class="comment-item__assignee">
                 ${avatarHtml || `<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3" r="2" stroke="currentColor" stroke-width="1"/><path d="M1 9C1 7 2.5 5.5 5 5.5C7.5 5.5 9 7 9 9" stroke="currentColor" stroke-width="1"/></svg>`}
@@ -660,11 +688,123 @@ function renderComments() {
     commentsList.querySelectorAll('.comment-item__url').forEach(link => {
         link.addEventListener('click', (e) => e.stopPropagation());
     });
+
+    // Drag-and-drop handlers
+    commentsList.querySelectorAll('.comment-item[draggable="true"]').forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', item.dataset.id);
+            e.dataTransfer.effectAllowed = 'move';
+            item.classList.add('dragging');
+        });
+
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+            // Remove drag-over from all folder chips
+            document.querySelectorAll('.folder-chip.drag-over').forEach(c => c.classList.remove('drag-over'));
+        });
+    });
+}
+
+// ─── Render Folders ───────────────────────────────────────────
+function renderFolders() {
+    const foldersList = $('#folders-list');
+    const folders = store.folders;
+    const comments = store.comments;
+
+    // Count per folder
+    const countAll = comments.length;
+    const countByFolder = {};
+    folders.forEach(f => { countByFolder[f.id] = 0; });
+    comments.forEach(c => { if (c.folderId && countByFolder[c.folderId] !== undefined) countByFolder[c.folderId]++; });
+
+    let html = `
+        <div class="folder-chip ${activeFolderId === 'all' ? 'active' : ''}" data-folder-id="all">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8v6H2z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Tutti <span class="folder-chip__count">${countAll}</span>
+        </div>
+    `;
+
+    html += folders.map(f => `
+        <div class="folder-chip ${activeFolderId === f.id ? 'active' : ''}" data-folder-id="${f.id}">
+            <span class="folder-chip__dot" style="background:${f.color}"></span>
+            ${escapeHtml(f.name)}
+            <span class="folder-chip__count">${countByFolder[f.id] || 0}</span>
+            <button class="folder-chip__remove" data-folder-delete="${f.id}" title="Elimina cartella">&times;</button>
+        </div>
+    `).join('');
+
+    foldersList.innerHTML = html;
+
+    // Folder click → filter
+    foldersList.querySelectorAll('.folder-chip').forEach(chip => {
+        chip.addEventListener('click', (e) => {
+            if (e.target.closest('.folder-chip__remove')) return;
+            activeFolderId = chip.dataset.folderId;
+            renderFolders();
+            renderComments();
+        });
+
+        // Drag-over for drop target (not "all")
+        if (chip.dataset.folderId !== 'all') {
+            chip.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                chip.classList.add('drag-over');
+            });
+            chip.addEventListener('dragleave', () => {
+                chip.classList.remove('drag-over');
+            });
+            chip.addEventListener('drop', (e) => {
+                e.preventDefault();
+                chip.classList.remove('drag-over');
+                const commentId = e.dataTransfer.getData('text/plain');
+                if (commentId) {
+                    store.moveCommentToFolder(commentId, chip.dataset.folderId);
+                    showToast('Commento spostato nella cartella', 'success');
+                }
+            });
+        }
+    });
+
+    // Delete folder
+    foldersList.querySelectorAll('[data-folder-delete]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const folderId = btn.dataset.folderDelete;
+            store.removeFolder(folderId);
+            if (activeFolderId === folderId) activeFolderId = 'all';
+            showToast('Cartella eliminata', 'success');
+        });
+    });
+
+    // Add folder button
+    const addFolderBtn = $('#add-folder-btn');
+    addFolderBtn.onclick = () => {
+        const name = prompt('Nome della cartella:');
+        if (!name || !name.trim()) return;
+        const colors = ['#6C5CE7', '#00CEC9', '#E17055', '#FDCB6E', '#0984E3', '#E84393', '#00B894'];
+        const color = colors[store.folders.length % colors.length];
+        store.addFolder(name.trim(), color);
+        showToast(`Cartella "${name.trim()}" creata`, 'success');
+    };
 }
 
 // ─── Render Tasks ─────────────────────────────────────────────
 function renderTasks() {
-    const tasks = store.tasks;
+    let tasks = store.tasks;
+
+    // Search filter
+    if (taskSearchQuery) {
+        const q = taskSearchQuery.toLowerCase();
+        tasks = tasks.filter(t => {
+            const comment = store.getCommentById(t.commentId);
+            const commentText = comment ? comment.text.toLowerCase() : '';
+            const memberName = t.assignee ? (store.getTeamMemberById(t.assignee)?.name || '') : '';
+            return t.text.toLowerCase().includes(q) ||
+                commentText.includes(q) ||
+                memberName.toLowerCase().includes(q);
+        });
+    }
 
     if (tasks.length === 0) {
         tasksEmpty.style.display = 'flex';
