@@ -1820,6 +1820,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  pointer-events: none;
 }
 
 .toast {
@@ -1834,6 +1835,7 @@ body {
   box-shadow: var(--shadow-lg);
   animation: toast-in 0.3s ease;
   max-width: 360px;
+  pointer-events: auto;
 }
 
 .toast--success {

@@ -219,8 +219,29 @@ export class SupabaseService {
             .eq('user_id', userId)
             .single();
         if (error && error.code !== 'PGRST116') throw error;
-        if (!data) return null;
-        return this._mapProfileFromDb(data);
+        if (data) return this._mapProfileFromDb(data);
+
+        // Auto-create profile for existing users who don't have one
+        const { data: { user } } = await supabase.auth.getUser();
+        const email = user?.email || '';
+        const isMaster = email === 'nicolo.dalzotto@gmail.com';
+        const newProfile = {
+            user_id: userId,
+            email,
+            role: isMaster ? 'master' : 'user',
+            monthly_limit: 200,
+            credits_used: 0,
+            credits_extra: 0,
+            billing_period_start: new Date().toISOString().split('T')[0],
+            suspended: false,
+        };
+        const { data: inserted, error: insertErr } = await supabase
+            .from('user_profiles')
+            .insert(newProfile)
+            .select()
+            .single();
+        if (insertErr) throw insertErr;
+        return this._mapProfileFromDb(inserted);
     }
 
     static async getAllProfiles() {
