@@ -1244,17 +1244,15 @@ function restoreState() {
 // ─── Credits Badge ────────────────────────────────────────────
 function updateCreditsBadge() {
     const remaining = store.creditsRemaining;
-    const profile = store.userProfile;
     creditsCount.textContent = remaining;
 
-    creditsBadge.classList.remove('warning', 'danger');
-    if (profile) {
-        const pct = remaining / (profile.monthlyLimit || 200);
-        if (remaining === 0) {
-            creditsBadge.classList.add('danger');
-        } else if (pct <= 0.2) {
-            creditsBadge.classList.add('warning');
-        }
+    creditsBadge.classList.remove('low', 'warning', 'danger');
+    if (remaining === 0) {
+        creditsBadge.classList.add('danger');
+    } else if (remaining < 20) {
+        creditsBadge.classList.add('warning');
+    } else if (remaining < 50) {
+        creditsBadge.classList.add('low');
     }
 
     // Show admin cursor on email if master

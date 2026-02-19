@@ -1947,6 +1947,12 @@ body {
   transform: scale(1.05);
 }
 
+.toolbar__credits-badge.low {
+  background: rgba(239, 68, 68, 0.08);
+  color: #B91C1C;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
 .toolbar__credits-badge.warning {
   background: #FEF3C7;
   color: #D97706;
@@ -2028,6 +2034,19 @@ body {
 }
 
 /* ─── Admin Panel ────────────────────────────────────────────── */
+
+.modal__card {
+  background: var(--color-bg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  width: 420px;
+  max-width: 95vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  animation: modal-appear 0.25s ease;
+  overflow: hidden;
+}
 
 .modal__card--wide {
   max-width: 720px;
