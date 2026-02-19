@@ -64,7 +64,7 @@ export const handler = async (event) => {
         // Determine the origin for redirect URLs
         const origin = event.headers.origin || event.headers.referer?.replace(/\/$/, '') || 'https://markup-app.netlify.app';
 
-        // Create Checkout Session
+        // Create Checkout Session in embedded mode
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             customer_email: userEmail || undefined,
@@ -80,8 +80,8 @@ export const handler = async (event) => {
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `${origin}?checkout=success`,
-            cancel_url: `${origin}?checkout=cancel`,
+            ui_mode: 'embedded',
+            return_url: `${origin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
             metadata: {
                 user_id: userId,
                 credits: pkg.credits.toString(),
@@ -92,7 +92,7 @@ export const handler = async (event) => {
         return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({ url: session.url }),
+            body: JSON.stringify({ clientSecret: session.client_secret }),
         };
     } catch (err) {
         console.error('Stripe checkout error:', err);

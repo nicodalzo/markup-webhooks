@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/src/styles/main.css">
+  <script src="https://js.stripe.com/v3/"></script>
 </head>
 
 <body>
@@ -472,13 +473,22 @@
     <div class="modal-overlay" id="purchase-modal" style="display:none">
       <div class="modal__card">
         <div class="modal__header">
-          <h3>Acquista Crediti</h3>
+          <h3 id="purchase-modal-title">Acquista Crediti</h3>
           <button class="modal__close" id="purchase-modal-close">&times;</button>
         </div>
         <div class="modal__body">
-          <p class="purchase-modal__desc">Scegli un pacchetto per aggiungere crediti extra al tuo account.</p>
-          <div class="purchase-packages" id="purchase-packages">
-            <!-- Dynamic packages -->
+          <div id="purchase-step-packages">
+            <p class="purchase-modal__desc">Scegli un pacchetto per aggiungere crediti extra al tuo account.</p>
+            <div class="purchase-packages" id="purchase-packages">
+              <!-- Dynamic packages -->
+            </div>
+          </div>
+          <div id="purchase-step-checkout" style="display:none">
+            <button class="btn btn--ghost" id="purchase-back" style="margin-bottom:12px">&larr; Torna ai
+              pacchetti</button>
+            <div id="stripe-checkout-container">
+              <!-- Stripe embedded checkout mounts here -->
+            </div>
           </div>
         </div>
       </div>
@@ -538,6 +548,11 @@
                 <label>Stripe Secret Key</label>
                 <input type="password" id="admin-stripe-key" class="modal__input"
                   placeholder="sk_live_... o sk_test_..." />
+              </div>
+              <div class="comment-dialog__field">
+                <label>Stripe Publishable Key</label>
+                <input type="text" id="admin-stripe-publishable-key" class="modal__input"
+                  placeholder="pk_live_... o pk_test_..." />
               </div>
               <div class="comment-dialog__field">
                 <label>Stripe Webhook Secret</label>

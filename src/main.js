@@ -86,6 +86,12 @@ const creditsCount = $('#credits-count');
 const purchaseModal = $('#purchase-modal');
 const purchaseModalClose = $('#purchase-modal-close');
 const purchasePackages = $('#purchase-packages');
+const purchaseStepPackages = $('#purchase-step-packages');
+const purchaseStepCheckout = $('#purchase-step-checkout');
+const stripeCheckoutContainer = $('#stripe-checkout-container');
+const purchaseBackBtn = $('#purchase-back');
+const purchaseModalTitle = $('#purchase-modal-title');
+let activeStripeCheckout = null; // track embedded checkout instance
 const adminModal = $('#admin-modal');
 const adminModalClose = $('#admin-modal-close');
 
@@ -360,10 +366,32 @@ function setupEventListeners() {
     // Credits badge click → open purchase modal
     creditsBadge.addEventListener('click', () => openPurchaseModal());
 
-    // Purchase modal
-    purchaseModalClose.addEventListener('click', () => purchaseModal.style.display = 'none');
+    // Purchase modal close + cleanup
+    const closePurchaseModal = () => {
+        purchaseModal.style.display = 'none';
+        if (activeStripeCheckout) {
+            activeStripeCheckout.destroy();
+            activeStripeCheckout = null;
+        }
+        purchaseStepPackages.style.display = '';
+        purchaseStepCheckout.style.display = 'none';
+        purchaseModalTitle.textContent = 'Acquista Crediti';
+    };
+    purchaseModalClose.addEventListener('click', closePurchaseModal);
     purchaseModal.addEventListener('click', (e) => {
-        if (e.target === purchaseModal) purchaseModal.style.display = 'none';
+        if (e.target === purchaseModal) closePurchaseModal();
+    });
+
+    // Purchase back button
+    purchaseBackBtn.addEventListener('click', () => {
+        if (activeStripeCheckout) {
+            activeStripeCheckout.destroy();
+            activeStripeCheckout = null;
+        }
+        stripeCheckoutContainer.innerHTML = '';
+        purchaseStepCheckout.style.display = 'none';
+        purchaseStepPackages.style.display = '';
+        purchaseModalTitle.textContent = 'Acquista Crediti';
     });
 
     // Admin modal (only master)
@@ -398,7 +426,7 @@ function setupEventListeners() {
             closeCommentDialog();
             teamModal.style.display = 'none';
             closeEditMemberModal();
-            purchaseModal.style.display = 'none';
+            closePurchaseModal();
             adminModal.style.display = 'none';
         }
     });
@@ -1265,6 +1293,9 @@ function updateCreditsBadge() {
 // ─── Purchase Modal ───────────────────────────────────────────
 async function openPurchaseModal() {
     purchaseModal.style.display = 'flex';
+    purchaseStepPackages.style.display = '';
+    purchaseStepCheckout.style.display = 'none';
+    purchaseModalTitle.textContent = 'Acquista Crediti';
     purchasePackages.innerHTML = '<p style="text-align:center;color:var(--color-text-tertiary)">Caricamento...</p>';
 
     try {
@@ -1282,7 +1313,7 @@ async function openPurchaseModal() {
             </div>
         `).join('');
 
-        // Click handler for each card
+        // Click handler for each card → mount embedded checkout
         purchasePackages.querySelectorAll('.purchase-card').forEach(card => {
             card.addEventListener('click', async () => {
                 const packageId = card.dataset.packageId;
@@ -1301,8 +1332,26 @@ async function openPurchaseModal() {
                         })
                     });
                     const data = await res.json();
-                    if (data.url) {
-                        window.location.href = data.url;
+                    if (data.clientSecret) {
+                        // Switch to checkout step
+                        purchaseStepPackages.style.display = 'none';
+                        purchaseStepCheckout.style.display = '';
+                        purchaseModalTitle.textContent = 'Pagamento';
+                        stripeCheckoutContainer.innerHTML = '';
+
+                        // Get publishable key from app_config
+                        const publishableKey = await SupabaseService.getAppConfig('stripe_publishable_key');
+                        if (!publishableKey) {
+                            showToast('Stripe publishable key non configurata', 'error');
+                            return;
+                        }
+
+                        // Mount embedded checkout
+                        const stripe = window.Stripe(publishableKey);
+                        activeStripeCheckout = await stripe.initEmbeddedCheckout({
+                            clientSecret: data.clientSecret,
+                        });
+                        activeStripeCheckout.mount('#stripe-checkout-container');
                     } else {
                         showToast(data.error || 'Errore nella creazione del pagamento', 'error');
                         card.style.opacity = '1';
@@ -1445,11 +1494,13 @@ async function renderAdminPackages() {
 
 async function loadAdminSettings() {
     try {
-        const [stripeKey, webhookSecret] = await Promise.all([
+        const [stripeKey, publishableKey, webhookSecret] = await Promise.all([
             SupabaseService.getAppConfig('stripe_secret_key'),
+            SupabaseService.getAppConfig('stripe_publishable_key'),
             SupabaseService.getAppConfig('stripe_webhook_secret'),
         ]);
         $('#admin-stripe-key').value = stripeKey || '';
+        $('#admin-stripe-publishable-key').value = publishableKey || '';
         $('#admin-stripe-webhook').value = webhookSecret || '';
     } catch (err) {
         console.warn('Failed to load admin settings:', err);
@@ -1458,11 +1509,13 @@ async function loadAdminSettings() {
 
 async function handleSaveAdminSettings() {
     const stripeKey = $('#admin-stripe-key').value.trim();
+    const publishableKey = $('#admin-stripe-publishable-key').value.trim();
     const webhookSecret = $('#admin-stripe-webhook').value.trim();
 
     try {
         await Promise.all([
             SupabaseService.setAppConfig('stripe_secret_key', stripeKey),
+            SupabaseService.setAppConfig('stripe_publishable_key', publishableKey),
             SupabaseService.setAppConfig('stripe_webhook_secret', webhookSecret),
         ]);
         showToast('Impostazioni Stripe salvate', 'success');
