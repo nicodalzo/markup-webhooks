@@ -209,6 +209,161 @@ export class SupabaseService {
         if (error) throw error;
     }
 
+    // ─── User Profiles (Credits & Admin) ──────────────────────
+
+    static async getUserProfile() {
+        const userId = await this._getUserId();
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+        if (error && error.code !== 'PGRST116') throw error;
+        if (!data) return null;
+        return this._mapProfileFromDb(data);
+    }
+
+    static async getAllProfiles() {
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .select('*, auth_email:user_id')
+            .order('created_at', { ascending: true });
+        if (error) throw error;
+        // We need emails — fetch them from auth.users via a join
+        // Since RLS on user_profiles allows master to read all,
+        // we fetch profiles and resolve emails separately
+        return (data || []).map(row => this._mapProfileFromDb(row));
+    }
+
+    /** Fetch all profiles with emails (master only) */
+    static async getAllProfilesWithEmails() {
+        // Get profiles
+        const { data: profiles, error } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .order('created_at', { ascending: true });
+        if (error) throw error;
+
+        // Get user emails from auth via the admin-friendly user list
+        // Since we can't query auth.users from the client, we'll store email in user_profiles
+        // For now, return profiles without emails — the UI will get email from the session
+        return (profiles || []).map(row => this._mapProfileFromDb(row));
+    }
+
+    static async updateUserProfile(userId, updates) {
+        const dbUpdates = {};
+        if (updates.role !== undefined) dbUpdates.role = updates.role;
+        if (updates.monthlyLimit !== undefined) dbUpdates.monthly_limit = updates.monthlyLimit;
+        if (updates.creditsUsed !== undefined) dbUpdates.credits_used = updates.creditsUsed;
+        if (updates.creditsExtra !== undefined) dbUpdates.credits_extra = updates.creditsExtra;
+        if (updates.suspended !== undefined) dbUpdates.suspended = updates.suspended;
+        if (updates.billingPeriodStart !== undefined) dbUpdates.billing_period_start = updates.billingPeriodStart;
+
+        const { error } = await supabase
+            .from('user_profiles')
+            .update(dbUpdates)
+            .eq('user_id', userId);
+        if (error) throw error;
+    }
+
+    /** Increment credits_used and auto-reset if new billing period */
+    static async incrementCreditsUsed() {
+        const profile = await this.getUserProfile();
+        if (!profile) return;
+
+        // Auto-reset if billing period expired (30 days)
+        const periodStart = new Date(profile.billingPeriodStart);
+        const now = new Date();
+        const daysDiff = Math.floor((now - periodStart) / (1000 * 60 * 60 * 24));
+
+        if (daysDiff >= 30) {
+            await this.updateUserProfile(profile.userId, {
+                creditsUsed: 1,
+                billingPeriodStart: now.toISOString().split('T')[0],
+            });
+        } else {
+            await this.updateUserProfile(profile.userId, {
+                creditsUsed: profile.creditsUsed + 1,
+            });
+        }
+    }
+
+    // ─── Credit Packages ──────────────────────────────────────
+
+    static async getActivePackages() {
+        const { data, error } = await supabase
+            .from('credit_packages')
+            .select('*')
+            .eq('active', true)
+            .order('position', { ascending: true });
+        if (error) throw error;
+        return (data || []).map(row => this._mapPackageFromDb(row));
+    }
+
+    static async getAllPackages() {
+        const { data, error } = await supabase
+            .from('credit_packages')
+            .select('*')
+            .order('position', { ascending: true });
+        if (error) throw error;
+        return (data || []).map(row => this._mapPackageFromDb(row));
+    }
+
+    static async addPackage(pkg) {
+        const { error } = await supabase
+            .from('credit_packages')
+            .insert({
+                credits: pkg.credits,
+                price_cents: pkg.priceCents,
+                label: pkg.label,
+                active: pkg.active !== false,
+                position: pkg.position || 0,
+            });
+        if (error) throw error;
+    }
+
+    static async updatePackage(id, updates) {
+        const dbUpdates = {};
+        if (updates.credits !== undefined) dbUpdates.credits = updates.credits;
+        if (updates.priceCents !== undefined) dbUpdates.price_cents = updates.priceCents;
+        if (updates.label !== undefined) dbUpdates.label = updates.label;
+        if (updates.active !== undefined) dbUpdates.active = updates.active;
+        if (updates.position !== undefined) dbUpdates.position = updates.position;
+
+        const { error } = await supabase
+            .from('credit_packages')
+            .update(dbUpdates)
+            .eq('id', id);
+        if (error) throw error;
+    }
+
+    static async removePackage(id) {
+        const { error } = await supabase
+            .from('credit_packages')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+    }
+
+    // ─── App Config ───────────────────────────────────────────
+
+    static async getAppConfig(key) {
+        const { data, error } = await supabase
+            .from('app_config')
+            .select('value')
+            .eq('key', key)
+            .single();
+        if (error && error.code !== 'PGRST116') throw error;
+        return data?.value || '';
+    }
+
+    static async setAppConfig(key, value) {
+        const { error } = await supabase
+            .from('app_config')
+            .upsert({ key, value, updated_at: new Date().toISOString() });
+        if (error) throw error;
+    }
+
     // ─── Data Mappers (DB ↔ JS) ──────────────────────────────
 
     static _mapMemberFromDb(row) {
@@ -304,6 +459,31 @@ export class SupabaseService {
             priority: task.priority || 'medium',
             completed: task.completed || false,
             created_at: task.createdAt
+        };
+    }
+
+    static _mapProfileFromDb(row) {
+        return {
+            userId: row.user_id,
+            email: row.email || '',
+            role: row.role || 'user',
+            monthlyLimit: row.monthly_limit ?? 200,
+            creditsUsed: row.credits_used ?? 0,
+            creditsExtra: row.credits_extra ?? 0,
+            billingPeriodStart: row.billing_period_start,
+            suspended: row.suspended ?? false,
+            createdAt: row.created_at,
+        };
+    }
+
+    static _mapPackageFromDb(row) {
+        return {
+            id: row.id,
+            credits: row.credits,
+            priceCents: row.price_cents,
+            label: row.label,
+            active: row.active,
+            position: row.position,
         };
     }
 }

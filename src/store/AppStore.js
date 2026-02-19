@@ -24,13 +24,14 @@ class AppStore {
         }
 
         try {
-            const [teamMembers, comments, tasks, folders, globalWebhookUrl, currentUrl] = await Promise.all([
+            const [teamMembers, comments, tasks, folders, globalWebhookUrl, currentUrl, userProfile] = await Promise.all([
                 SupabaseService.getTeamMembers(),
                 SupabaseService.getComments(),
                 SupabaseService.getTasks(),
                 SupabaseService.getFolders(),
                 SupabaseService.getSetting('globalWebhookUrl'),
-                SupabaseService.getSetting('currentUrl')
+                SupabaseService.getSetting('currentUrl'),
+                SupabaseService.getUserProfile()
             ]);
 
             this.state.teamMembers = teamMembers;
@@ -39,7 +40,23 @@ class AppStore {
             this.state.folders = folders;
             this.state.globalWebhookUrl = globalWebhookUrl || '';
             this.state.currentUrl = currentUrl || this.state.currentUrl;
+            this.state.userProfile = userProfile;
             this.dbReady = true;
+
+            // Auto-reset billing period if needed
+            if (userProfile) {
+                const periodStart = new Date(userProfile.billingPeriodStart);
+                const now = new Date();
+                const daysDiff = Math.floor((now - periodStart) / (1000 * 60 * 60 * 24));
+                if (daysDiff >= 30) {
+                    this.state.userProfile.creditsUsed = 0;
+                    this.state.userProfile.billingPeriodStart = now.toISOString().split('T')[0];
+                    SupabaseService.updateUserProfile(userProfile.userId, {
+                        creditsUsed: 0,
+                        billingPeriodStart: this.state.userProfile.billingPeriodStart
+                    }).catch(e => console.warn('Failed to reset billing period:', e));
+                }
+            }
 
             // Sync localStorage
             this._saveLocal();
@@ -52,6 +69,7 @@ class AppStore {
             this._emit('tasksUpdated');
             this._emit('foldersUpdated');
             this._emit('countsChanged');
+            this._emit('profileUpdated');
         } catch (err) {
             console.warn('⚠️ Supabase load failed, using localStorage:', err.message);
         }
@@ -65,6 +83,29 @@ class AppStore {
     get currentUrl() { return this.state.currentUrl; }
     get mode() { return this.state.mode; }
     get globalWebhookUrl() { return this.state.globalWebhookUrl; }
+    get userProfile() { return this.state.userProfile; }
+    get isMaster() { return this.state.userProfile?.role === 'master'; }
+
+    get creditsRemaining() {
+        const p = this.state.userProfile;
+        if (!p) return 0;
+        const base = Math.max(0, p.monthlyLimit - p.creditsUsed);
+        return base + (p.creditsExtra || 0);
+    }
+
+    get canComment() {
+        const p = this.state.userProfile;
+        if (!p) return false;
+        if (p.suspended) return false;
+        return this.creditsRemaining > 0;
+    }
+
+    async refreshProfile() {
+        try {
+            this.state.userProfile = await SupabaseService.getUserProfile();
+            this._emit('profileUpdated');
+        } catch (e) { console.warn('Failed to refresh profile:', e); }
+    }
 
     // ─── URL ────────────────────────────────────────────────────
     setCurrentUrl(url) {
@@ -83,6 +124,12 @@ class AppStore {
 
     // ─── Comments ───────────────────────────────────────────────
     addComment(comment) {
+        // Check credits before allowing comment
+        if (!this.canComment) {
+            this._emit('creditsExhausted');
+            return null;
+        }
+
         const newComment = {
             id: this._generateId(),
             number: this.state.comments.length + 1,
@@ -112,15 +159,27 @@ class AppStore {
         };
         this.state.tasks.push(newTask);
 
+        // Deduct credit: prefer monthly first, then extra
+        if (this.state.userProfile) {
+            const p = this.state.userProfile;
+            if (p.creditsUsed < p.monthlyLimit) {
+                p.creditsUsed++;
+            } else if (p.creditsExtra > 0) {
+                p.creditsExtra--;
+            }
+        }
+
         this._saveLocal();
         this._dbSave(async () => {
             await SupabaseService.addComment(newComment);
             await SupabaseService.addTask(newTask);
+            await SupabaseService.incrementCreditsUsed();
         });
 
         this._emit('commentAdded', newComment);
         this._emit('taskAdded', newTask);
         this._emit('countsChanged');
+        this._emit('profileUpdated');
 
         return newComment;
     }

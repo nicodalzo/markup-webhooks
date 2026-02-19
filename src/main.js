@@ -6,6 +6,7 @@ import { store } from './store/AppStore.js';
 import { ProxyService } from './services/ProxyService.js';
 import { WebhookService } from './services/WebhookService.js';
 import { AuthService } from './services/AuthService.js';
+import { SupabaseService } from './services/SupabaseService.js';
 
 // ─── DOM References ─────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
@@ -79,6 +80,15 @@ const authToggleText = $('#auth-toggle-text');
 const toolbarUserEmail = $('#toolbar-user-email');
 const logoutBtn = $('#logout-btn');
 
+// Credits & Admin elements
+const creditsBadge = $('#credits-badge');
+const creditsCount = $('#credits-count');
+const purchaseModal = $('#purchase-modal');
+const purchaseModalClose = $('#purchase-modal-close');
+const purchasePackages = $('#purchase-packages');
+const adminModal = $('#admin-modal');
+const adminModalClose = $('#admin-modal-close');
+
 // ─── State ────────────────────────────────────────────────────
 let pendingCommentPosition = null;
 let pendingAvatarData = '';       // for add form
@@ -133,6 +143,19 @@ async function showApp(user) {
     renderTasks();
     renderTeam();
     updateAssigneeDropdowns();
+    updateCreditsBadge();
+
+    // Check for Stripe checkout result in URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') === 'success') {
+        showToast('Crediti acquistati con successo! Potrebbero volerci pochi secondi per aggiornarsi.', 'success');
+        window.history.replaceState({}, '', window.location.pathname);
+        // Refresh profile after a delay to allow webhook to process
+        setTimeout(() => store.refreshProfile(), 3000);
+    } else if (params.get('checkout') === 'cancel') {
+        showToast('Acquisto annullato', 'warning');
+        window.history.replaceState({}, '', window.location.pathname);
+    }
 }
 
 function showAuth() {
@@ -334,12 +357,49 @@ function setupEventListeners() {
         }
     });
 
+    // Credits badge click → open purchase modal
+    creditsBadge.addEventListener('click', () => openPurchaseModal());
+
+    // Purchase modal
+    purchaseModalClose.addEventListener('click', () => purchaseModal.style.display = 'none');
+    purchaseModal.addEventListener('click', (e) => {
+        if (e.target === purchaseModal) purchaseModal.style.display = 'none';
+    });
+
+    // Admin modal (only master)
+    toolbarUserEmail.addEventListener('click', () => {
+        if (store.isMaster) openAdminPanel();
+    });
+    adminModalClose.addEventListener('click', () => adminModal.style.display = 'none');
+    adminModal.addEventListener('click', (e) => {
+        if (e.target === adminModal) adminModal.style.display = 'none';
+    });
+
+    // Admin tabs
+    $$('.admin__tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            $$('.admin__tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            $$('.admin__panel').forEach(p => p.classList.remove('active'));
+            const panelId = `admin-${tab.dataset.adminTab}-panel`;
+            document.getElementById(panelId)?.classList.add('active');
+        });
+    });
+
+    // Admin save settings
+    $('#admin-save-settings').addEventListener('click', handleSaveAdminSettings);
+
+    // Admin add package
+    $('#admin-add-package').addEventListener('click', handleAddPackage);
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeCommentDialog();
             teamModal.style.display = 'none';
             closeEditMemberModal();
+            purchaseModal.style.display = 'none';
+            adminModal.style.display = 'none';
         }
     });
 }
@@ -390,6 +450,15 @@ function setupStoreListeners() {
         renderFolders();
         renderComments();
         updateCounts();
+    });
+
+    store.on('profileUpdated', () => {
+        updateCreditsBadge();
+    });
+
+    store.on('creditsExhausted', () => {
+        showToast('Crediti esauriti! Acquista un pacchetto per continuare.', 'warning');
+        openPurchaseModal();
     });
 }
 
@@ -531,8 +600,12 @@ function handleSaveComment() {
         tags
     });
 
+    // addComment returns null if credits exhausted
+    if (!comment) return;
+
     closeCommentDialog();
     showToast(`Commento #${comment.number} aggiunto`, 'success');
+    updateCreditsBadge();
 
     // Switch to comments tab
     $$('.sidebar__tab').forEach(t => t.classList.remove('active'));
@@ -1166,6 +1239,261 @@ function restoreState() {
 
     // Restore mode
     updateModeUI(store.mode);
+}
+
+// ─── Credits Badge ────────────────────────────────────────────
+function updateCreditsBadge() {
+    const remaining = store.creditsRemaining;
+    const profile = store.userProfile;
+    creditsCount.textContent = remaining;
+
+    creditsBadge.classList.remove('warning', 'danger');
+    if (profile) {
+        const pct = remaining / (profile.monthlyLimit || 200);
+        if (remaining === 0) {
+            creditsBadge.classList.add('danger');
+        } else if (pct <= 0.2) {
+            creditsBadge.classList.add('warning');
+        }
+    }
+
+    // Show admin cursor on email if master
+    if (store.isMaster) {
+        toolbarUserEmail.title = 'Apri pannello admin';
+        toolbarUserEmail.style.textDecoration = 'underline';
+    }
+}
+
+// ─── Purchase Modal ───────────────────────────────────────────
+async function openPurchaseModal() {
+    purchaseModal.style.display = 'flex';
+    purchasePackages.innerHTML = '<p style="text-align:center;color:var(--color-text-tertiary)">Caricamento...</p>';
+
+    try {
+        const packages = await SupabaseService.getActivePackages();
+        if (!packages.length) {
+            purchasePackages.innerHTML = '<p style="text-align:center;color:var(--color-text-tertiary)">Nessun pacchetto disponibile.</p>';
+            return;
+        }
+
+        purchasePackages.innerHTML = packages.map(pkg => `
+            <div class="purchase-card" data-package-id="${pkg.id}">
+                <span class="purchase-card__credits">${pkg.credits}</span>
+                <span class="purchase-card__label">crediti</span>
+                <span class="purchase-card__price">\u20ac${(pkg.priceCents / 100).toFixed(2)}</span>
+            </div>
+        `).join('');
+
+        // Click handler for each card
+        purchasePackages.querySelectorAll('.purchase-card').forEach(card => {
+            card.addEventListener('click', async () => {
+                const packageId = card.dataset.packageId;
+                card.style.opacity = '0.5';
+                card.style.pointerEvents = 'none';
+
+                try {
+                    const session = await AuthService.getSession();
+                    const res = await fetch('/api/stripe-checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            packageId,
+                            userId: session.user.id,
+                            userEmail: session.user.email,
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.url) {
+                        window.location.href = data.url;
+                    } else {
+                        showToast(data.error || 'Errore nella creazione del pagamento', 'error');
+                        card.style.opacity = '1';
+                        card.style.pointerEvents = 'auto';
+                    }
+                } catch (err) {
+                    showToast('Errore di rete', 'error');
+                    card.style.opacity = '1';
+                    card.style.pointerEvents = 'auto';
+                }
+            });
+        });
+    } catch (err) {
+        purchasePackages.innerHTML = '<p style="color:var(--color-error)">Errore nel caricamento dei pacchetti.</p>';
+    }
+}
+
+// ─── Admin Panel ──────────────────────────────────────────────
+async function openAdminPanel() {
+    adminModal.style.display = 'flex';
+    await Promise.all([renderAdminUsers(), renderAdminPackages(), loadAdminSettings()]);
+}
+
+async function renderAdminUsers() {
+    const tbody = $('#admin-users-list');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-text-tertiary)">Caricamento...</td></tr>';
+
+    try {
+        const profiles = await SupabaseService.getAllProfilesWithEmails();
+        tbody.innerHTML = profiles.map(p => {
+            const statusClass = p.suspended ? 'suspended' : 'active';
+            const statusLabel = p.suspended ? 'Sospeso' : 'Attivo';
+            const roleClass = p.role === 'master' ? 'master' : 'user';
+            const used = p.creditsUsed;
+            const limit = p.monthlyLimit;
+            const extra = p.creditsExtra;
+
+            return `<tr data-user-id="${p.userId}">
+                <td>${escapeHtml(p.email || p.userId.substring(0, 8))}</td>
+                <td><span class="admin__badge admin__badge--${roleClass}">${p.role}</span></td>
+                <td>${used}/${limit}${extra ? ` +${extra}` : ''}</td>
+                <td><input type="number" class="admin__inline-input admin-limit-input" value="${limit}" min="0" data-user-id="${p.userId}" /></td>
+                <td><span class="admin__badge admin__badge--${statusClass}">${statusLabel}</span></td>
+                <td>
+                    <div class="admin__btn-group">
+                        <button class="btn btn--ghost admin-toggle-suspend" data-user-id="${p.userId}" data-suspended="${p.suspended}">${p.suspended ? 'Riattiva' : 'Sospendi'}</button>
+                        <button class="btn btn--ghost admin-toggle-role" data-user-id="${p.userId}" data-role="${p.role}">${p.role === 'master' ? 'Rimuovi master' : 'Nomina master'}</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+
+        // Suspend/activate handlers
+        tbody.querySelectorAll('.admin-toggle-suspend').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const userId = btn.dataset.userId;
+                const isSuspended = btn.dataset.suspended === 'true';
+                await SupabaseService.updateUserProfile(userId, { suspended: !isSuspended });
+                showToast(isSuspended ? 'Utente riattivato' : 'Utente sospeso', 'success');
+                renderAdminUsers();
+            });
+        });
+
+        // Role toggle handlers
+        tbody.querySelectorAll('.admin-toggle-role').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const userId = btn.dataset.userId;
+                const currentRole = btn.dataset.role;
+                const newRole = currentRole === 'master' ? 'user' : 'master';
+                await SupabaseService.updateUserProfile(userId, { role: newRole });
+                showToast(`Ruolo aggiornato a ${newRole}`, 'success');
+                renderAdminUsers();
+            });
+        });
+
+        // Limit change handlers (on blur)
+        tbody.querySelectorAll('.admin-limit-input').forEach(input => {
+            input.addEventListener('change', async () => {
+                const userId = input.dataset.userId;
+                const newLimit = parseInt(input.value, 10);
+                if (isNaN(newLimit) || newLimit < 0) return;
+                await SupabaseService.updateUserProfile(userId, { monthlyLimit: newLimit });
+                showToast('Limite aggiornato', 'success');
+            });
+        });
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--color-error)">Errore: ${err.message}</td></tr>`;
+    }
+}
+
+async function renderAdminPackages() {
+    const tbody = $('#admin-packages-list');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--color-text-tertiary)">Caricamento...</td></tr>';
+
+    try {
+        const packages = await SupabaseService.getAllPackages();
+        tbody.innerHTML = packages.map(pkg => `
+            <tr data-package-id="${pkg.id}">
+                <td><input type="text" class="admin__inline-input pkg-label" value="${escapeHtml(pkg.label)}" style="width:120px" /></td>
+                <td><input type="number" class="admin__inline-input pkg-credits" value="${pkg.credits}" min="1" /></td>
+                <td><input type="number" class="admin__inline-input pkg-price" value="${(pkg.priceCents / 100).toFixed(2)}" min="0" step="0.01" style="width:70px" /></td>
+                <td><input type="checkbox" class="pkg-active" ${pkg.active ? 'checked' : ''} /></td>
+                <td>
+                    <div class="admin__btn-group">
+                        <button class="btn btn--primary btn--sm pkg-save" data-id="${pkg.id}">Salva</button>
+                        <button class="btn btn--ghost btn--sm pkg-delete" data-id="${pkg.id}">\u2715</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+        // Save package handlers
+        tbody.querySelectorAll('.pkg-save').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const row = btn.closest('tr');
+                const id = btn.dataset.id;
+                const label = row.querySelector('.pkg-label').value.trim();
+                const credits = parseInt(row.querySelector('.pkg-credits').value, 10);
+                const priceCents = Math.round(parseFloat(row.querySelector('.pkg-price').value) * 100);
+                const active = row.querySelector('.pkg-active').checked;
+
+                await SupabaseService.updatePackage(id, { label, credits, priceCents, active });
+                showToast('Pacchetto aggiornato', 'success');
+            });
+        });
+
+        // Delete package handlers
+        tbody.querySelectorAll('.pkg-delete').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!confirm('Eliminare questo pacchetto?')) return;
+                await SupabaseService.removePackage(btn.dataset.id);
+                showToast('Pacchetto eliminato', 'success');
+                renderAdminPackages();
+            });
+        });
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--color-error)">Errore: ${err.message}</td></tr>`;
+    }
+}
+
+async function loadAdminSettings() {
+    try {
+        const [stripeKey, webhookSecret] = await Promise.all([
+            SupabaseService.getAppConfig('stripe_secret_key'),
+            SupabaseService.getAppConfig('stripe_webhook_secret'),
+        ]);
+        $('#admin-stripe-key').value = stripeKey || '';
+        $('#admin-stripe-webhook').value = webhookSecret || '';
+    } catch (err) {
+        console.warn('Failed to load admin settings:', err);
+    }
+}
+
+async function handleSaveAdminSettings() {
+    const stripeKey = $('#admin-stripe-key').value.trim();
+    const webhookSecret = $('#admin-stripe-webhook').value.trim();
+
+    try {
+        await Promise.all([
+            SupabaseService.setAppConfig('stripe_secret_key', stripeKey),
+            SupabaseService.setAppConfig('stripe_webhook_secret', webhookSecret),
+        ]);
+        showToast('Impostazioni Stripe salvate', 'success');
+    } catch (err) {
+        showToast('Errore nel salvataggio: ' + err.message, 'error');
+    }
+}
+
+async function handleAddPackage() {
+    const label = prompt('Nome del pacchetto (es. "50 Crediti"):');
+    if (!label) return;
+    const credits = parseInt(prompt('Numero di crediti:'), 10);
+    if (isNaN(credits) || credits <= 0) return;
+    const price = parseFloat(prompt('Prezzo in EUR (es. 4.99):'));
+    if (isNaN(price) || price <= 0) return;
+
+    try {
+        await SupabaseService.addPackage({
+            label,
+            credits,
+            priceCents: Math.round(price * 100),
+            active: true,
+            position: 99,
+        });
+        showToast('Pacchetto creato', 'success');
+        renderAdminPackages();
+    } catch (err) {
+        showToast('Errore: ' + err.message, 'error');
+    }
 }
 
 // ─── Utilities ────────────────────────────────────────────────

@@ -1922,3 +1922,243 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-tertiary);
 }
+
+/* ─── Credits Badge ──────────────────────────────────────────── */
+
+.toolbar__credits-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid var(--color-primary-light);
+}
+
+.toolbar__credits-badge:hover {
+  background: var(--color-primary-bg-hover);
+  transform: scale(1.05);
+}
+
+.toolbar__credits-badge.warning {
+  background: #FEF3C7;
+  color: #D97706;
+  border-color: #F59E0B;
+}
+
+.toolbar__credits-badge.danger {
+  background: #FEE2E2;
+  color: #DC2626;
+  border-color: #EF4444;
+  animation: pulse-badge 1.5s infinite;
+}
+
+@keyframes pulse-badge {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .7;
+  }
+}
+
+/* ─── Purchase Modal ─────────────────────────────────────────── */
+
+.purchase-modal__desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 16px;
+}
+
+.purchase-packages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.purchase-card {
+  background: var(--color-bg-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 20px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.purchase-card:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.purchase-card__credits {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-primary);
+  display: block;
+}
+
+.purchase-card__label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  display: block;
+  margin-top: 2px;
+}
+
+.purchase-card__price {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-top: 10px;
+  display: block;
+}
+
+/* ─── Admin Panel ────────────────────────────────────────────── */
+
+.modal__card--wide {
+  max-width: 720px;
+  width: 95vw;
+}
+
+.admin__tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 20px;
+}
+
+.admin__tab {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.admin__tab:hover {
+  color: var(--color-text);
+}
+
+.admin__tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.admin__panel {
+  display: none;
+}
+
+.admin__panel.active {
+  display: block;
+}
+
+.admin__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.admin__table th {
+  text-align: left;
+  padding: 10px 8px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: .5px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin__table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text);
+}
+
+.admin__table tr:hover td {
+  background: var(--color-bg-secondary);
+}
+
+.admin__actions-bar {
+  padding: 0 0 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin__settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 480px;
+}
+
+.btn--sm {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+.admin__badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.admin__badge--master {
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+}
+
+.admin__badge--user {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.admin__badge--active {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.admin__badge--suspended {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.admin__btn-group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.admin__btn-group .btn {
+  padding: 3px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.admin__inline-input {
+  width: 60px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}

@@ -135,7 +135,14 @@
           </svg>
         </button>
         <div class="toolbar__user" id="toolbar-user">
-          <span class="toolbar__user-email" id="toolbar-user-email"></span>
+          <span class="toolbar__credits-badge" id="credits-badge" title="Crediti disponibili">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2" /><text x="6" y="8"
+                text-anchor="middle" font-size="7" font-weight="700" fill="currentColor">C</text>
+            </svg>
+            <span id="credits-count">—</span>
+          </span>
+          <span class="toolbar__user-email" id="toolbar-user-email" style="cursor:pointer"></span>
           <button class="toolbar__icon-btn" id="logout-btn" title="Logout">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path
@@ -457,6 +464,88 @@
         <div class="modal__footer">
           <button class="btn btn--ghost" id="edit-member-cancel">Annulla</button>
           <button class="btn btn--primary" id="edit-member-save">Salva modifiche</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Purchase Credits Modal -->
+    <div class="modal" id="purchase-modal" style="display:none">
+      <div class="modal__card">
+        <div class="modal__header">
+          <h3>Acquista Crediti</h3>
+          <button class="modal__close" id="purchase-modal-close">&times;</button>
+        </div>
+        <div class="modal__body">
+          <p class="purchase-modal__desc">Scegli un pacchetto per aggiungere crediti extra al tuo account.</p>
+          <div class="purchase-packages" id="purchase-packages">
+            <!-- Dynamic packages -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Panel Modal -->
+    <div class="modal" id="admin-modal" style="display:none">
+      <div class="modal__card modal__card--wide">
+        <div class="modal__header">
+          <h3>Pannello Admin</h3>
+          <button class="modal__close" id="admin-modal-close">&times;</button>
+        </div>
+        <div class="admin__tabs">
+          <button class="admin__tab active" data-admin-tab="users">Utenti</button>
+          <button class="admin__tab" data-admin-tab="packages">Pacchetti</button>
+          <button class="admin__tab" data-admin-tab="settings">Impostazioni</button>
+        </div>
+        <div class="modal__body">
+          <!-- Users Tab -->
+          <div class="admin__panel active" id="admin-users-panel">
+            <table class="admin__table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Ruolo</th>
+                  <th>Crediti</th>
+                  <th>Limite</th>
+                  <th>Stato</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-list"></tbody>
+            </table>
+          </div>
+          <!-- Packages Tab -->
+          <div class="admin__panel" id="admin-packages-panel">
+            <div class="admin__actions-bar">
+              <button class="btn btn--primary btn--sm" id="admin-add-package">+ Nuovo pacchetto</button>
+            </div>
+            <table class="admin__table">
+              <thead>
+                <tr>
+                  <th>Label</th>
+                  <th>Crediti</th>
+                  <th>Prezzo</th>
+                  <th>Attivo</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="admin-packages-list"></tbody>
+            </table>
+          </div>
+          <!-- Settings Tab -->
+          <div class="admin__panel" id="admin-settings-panel">
+            <div class="admin__settings-form">
+              <div class="comment-dialog__field">
+                <label>Stripe Secret Key</label>
+                <input type="password" id="admin-stripe-key" class="modal__input"
+                  placeholder="sk_live_... o sk_test_..." />
+              </div>
+              <div class="comment-dialog__field">
+                <label>Stripe Webhook Secret</label>
+                <input type="password" id="admin-stripe-webhook" class="modal__input" placeholder="whsec_..." />
+              </div>
+              <button class="btn btn--primary" id="admin-save-settings">Salva impostazioni</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
